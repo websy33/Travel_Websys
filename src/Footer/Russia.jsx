@@ -1,0 +1,1367 @@
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  FaStar, FaCalendarAlt, FaCity, FaUmbrella, FaUtensils, 
+  FaChevronDown, FaTimes, FaPhone, FaEnvelope, FaMapMarkerAlt, 
+  FaPlus, FaMinus, FaLandmark, FaTree, FaWater, FaMountain,
+  FaSnowflake, FaExclamationCircle
+} from 'react-icons/fa';
+import { GiModernCity, GiIsland, GiShoppingBag } from 'react-icons/gi';
+import { MdOutlineBeachAccess, MdFamilyRestroom, MdTempleHindu } from 'react-icons/md';
+import { IoMdTrain } from 'react-icons/io';
+import { SiYourtraveldottv } from 'react-icons/si';
+import emailjs from '@emailjs/browser';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+
+const Russia = () => {
+  const [activeTab, setActiveTab] = useState('all');
+  const [expandedPackage, setExpandedPackage] = useState(null);
+  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
+  const [showPaymentError, setShowPaymentError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    adults: 2,
+    children: 0,
+    childrenAges: '',
+    arrivalDate: '',
+    departureDate: '',
+    accommodationType: 'hotel',
+    mealsIncluded: 'yes',
+    budget: '',
+    specialRequests: {
+      cityTour: false,
+      nature: false,
+      cultural: false,
+      adventure: false,
+      other: ''
+    },
+    message: ''
+  });
+
+  // Load Razorpay script
+  useEffect(() => {
+    const loadRazorpay = () => {
+      return new Promise((resolve) => {
+        if (window.Razorpay) {
+          setRazorpayLoaded(true);
+          resolve(true);
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.async = true;
+        script.onload = () => {
+          setRazorpayLoaded(true);
+          resolve(true);
+        };
+        script.onerror = () => {
+          console.error('Failed to load Razorpay script');
+          resolve(false);
+        };
+        document.body.appendChild(script);
+      });
+    };
+
+    loadRazorpay();
+  }, []);
+
+  // Validation function
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!formData.name.trim()) errors.name = 'Name is required';
+    if (!formData.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = 'Email is invalid';
+    }
+    if (!formData.phone.trim()) {
+      errors.phone = 'Phone number is required';
+    } else if (!/^\+?[\d\s-]{10,}$/.test(formData.phone)) {
+      errors.phone = 'Phone number is invalid';
+    }
+    if (!formData.arrivalDate) errors.arrivalDate = 'Arrival date is required';
+    if (!formData.departureDate) errors.departureDate = 'Departure date is required';
+    if (formData.arrivalDate && formData.departureDate && formData.arrivalDate >= formData.departureDate) {
+      errors.departureDate = 'Departure date must be after arrival date';
+    }
+    if (formData.adults < 1) errors.adults = 'At least 1 adult is required';
+    if (formData.children > 0 && !formData.childrenAges.trim()) {
+      errors.childrenAges = 'Children ages are required when children are included';
+    }
+    if (!formData.budget) errors.budget = 'Budget range is required';
+    
+    return errors;
+  };
+
+  // Function to prepare and send email
+  const sendBookingEmail = async (paymentMethod = 'Booking Request', paymentId = '') => {
+    const specialRequests = [];
+    if (formData.specialRequests.cityTour) specialRequests.push("City Tours");
+    if (formData.specialRequests.nature) specialRequests.push("Nature Experiences");
+    if (formData.specialRequests.cultural) specialRequests.push("Cultural Experiences");
+    if (formData.specialRequests.adventure) specialRequests.push("Adventure Activities");
+    if (formData.specialRequests.other) specialRequests.push(formData.specialRequests.other);
+    
+    const specialRequestsText = specialRequests.length > 0 
+      ? specialRequests.join(", ") 
+      : 'No special requests';
+
+    const paymentInfo = paymentId ? `Payment ID: ${paymentId}` : paymentMethod;
+    const fullMessage = `${formData.message}\n\nSpecial Requests: ${specialRequestsText}\n\nPayment Method: ${paymentInfo}`;
+
+    try {
+      const result = await emailjs.send(
+        'service_ov629rm',
+        'template_jr1dnto',
+        {
+          package_name: selectedPackage.title,
+          destination: "Russia",
+          package_price: selectedPackage.price,
+          duration: selectedPackage.duration,
+          from_name: formData.name,
+          from_email: formData.email,
+          phone_number: formData.phone,
+          arrivalDate: formData.arrivalDate ? formData.arrivalDate.toDateString() : '',
+          departureDate: formData.departureDate ? formData.departureDate.toDateString() : '',
+          adults: formData.adults,
+          kids: formData.children || '0',
+          kidsAges: formData.childrenAges || 'Not specified',
+          accommodationType: formData.accommodationType === 'hotel' ? 'Hotel' : 
+                           formData.accommodationType === 'homestay' ? 'Homestay' : 
+                           formData.accommodationType === 'apartment' ? 'Apartment' : 'Resort',
+          mealsIncluded: formData.mealsIncluded === 'yes' ? 'Included' : 'Excluded',
+          budget: formData.budget,
+          message: fullMessage,
+          payment_method: paymentInfo
+        }
+      );
+      return result;
+    } catch (error) {
+      console.error('Email sending failed:', error);
+      throw error;
+    }
+  };
+
+  // Updated payment handler with better error handling
+  const paymentHandler = async (e) => {
+    e.preventDefault();
+    setPaymentProcessing(true);
+    
+    // Validate form before payment
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      setShowPaymentError(true);
+      setPaymentProcessing(false);
+      
+      // Scroll to first error
+      const firstErrorField = Object.keys(errors)[0];
+      const errorElement = document.getElementById(firstErrorField);
+      if (errorElement) {
+        errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      
+      setTimeout(() => setShowPaymentError(false), 5000);
+      return;
+    }
+    
+    // Check if Razorpay is loaded
+    if (!razorpayLoaded) {
+      alert('Payment system is still loading. Please wait a moment and try again.');
+      setPaymentProcessing(false);
+      return;
+    }
+    
+    if (!window.Razorpay) {
+      alert('Payment service is unavailable. Please try the booking request option.');
+      setPaymentProcessing(false);
+      return;
+    }
+    
+    try {
+      // Direct Razorpay integration without backend
+      const amount = 50000; // ₹500.00 in paise
+      const currency = "INR";
+      
+      const options = {
+        key: "rzp_live_R8Ga0PdPPfJptw", 
+        amount: amount,
+        currency: currency,
+        name: "Traveligo",
+        description: `Russia Tour Package - ${selectedPackage.title}`,
+        image: "https://cdn.razorpay.com/logos/7K3b6d18wHwKzL_medium.png",
+        handler: function (response) {
+          console.log('Payment successful:', response);
+          
+          // Send success email with payment ID
+          sendBookingEmail('Online Payment Successful', response.razorpay_payment_id)
+            .then(() => {
+              console.log('Payment success email sent');
+              // Show success message
+              setSubmitSuccess(true);
+              setTimeout(() => {
+                setSubmitSuccess(false);
+                setIsBookingOpen(false);
+                resetForm();
+              }, 3000);
+            })
+            .catch(err => {
+              console.error('Failed to send success email:', err);
+              // Still show success but warn about email
+              alert('Payment successful! However, we could not send the confirmation email. Please note your Payment ID: ' + response.razorpay_payment_id);
+              setSubmitSuccess(true);
+              setTimeout(() => {
+                setSubmitSuccess(false);
+                setIsBookingOpen(false);
+                resetForm();
+              }, 3000);
+            });
+        },
+        prefill: {
+          name: formData.name,
+          email: formData.email,
+          contact: formData.phone.replace(/\D/g, '') // Remove non-digits
+        },
+        notes: {
+          package: selectedPackage.title,
+          destination: "Russia",
+          booking_reference: `RUSSIA-${Date.now()}`,
+          customer_email: formData.email
+        },
+        theme: {
+          color: "#2563EB"
+        }
+      };
+      
+      const rzp1 = new window.Razorpay(options);
+      
+      rzp1.on('payment.failed', function (response) {
+        console.error('Payment failed:', response.error);
+        let errorMessage = 'Payment failed. Please try again.';
+        
+        if (response.error && response.error.description) {
+          errorMessage = `Payment failed: ${response.error.description}`;
+        }
+        
+        alert(errorMessage);
+        
+        // Send failure notification email
+        sendBookingEmail(`Payment Failed - ${response.error?.description || 'Unknown error'}`)
+          .then(() => console.log('Payment failure email sent'))
+          .catch(err => console.error('Failed to send failure email:', err));
+      });
+      
+      rzp1.open();
+      
+    } catch (error) {
+      console.error("Payment initialization error:", error);
+      alert("Payment initialization failed. Please try again or use the booking request option.");
+    } finally {
+      setPaymentProcessing(false);
+    }
+  };
+
+  // Function to reset form
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      adults: 2,
+      children: 0,
+      childrenAges: '',
+      arrivalDate: '',
+      departureDate: '',
+      accommodationType: 'hotel',
+      mealsIncluded: 'yes',
+      budget: '',
+      specialRequests: {
+        cityTour: false,
+        nature: false,
+        cultural: false,
+        adventure: false,
+        other: ''
+      },
+      message: ''
+    });
+    setFormErrors({});
+  };
+
+  const packages = [
+    {
+      id: 1,
+      title: "Golden Ring & Moscow",
+      duration: "10 Days / 9 Nights",
+      price: "₽120,000",
+      rating: 4.9,
+      image: "/images/Russia1.jpeg",
+      type: "popular",
+      highlights: [
+        "Moscow Kremlin and Red Square",
+        "St. Basil's Cathedral",
+        "Golden Ring cities tour",
+        "Tretyakov Gallery",
+        "Bolshoi Theatre performance",
+        "Moscow Metro tour",
+        "Traditional Russian banya experience"
+      ],
+      icon: <FaStar className="text-2xl text-yellow-500" />
+    },
+    {
+      id: 2,
+      title: "Imperial St. Petersburg",
+      duration: "8 Days / 7 Nights",
+      price: "₽150,000",
+      rating: 4.8,
+      image: "/images/Russia2.jpeg",
+      type: "luxury",
+      highlights: [
+        "Hermitage Museum VIP access",
+        "Peterhof Palace and gardens",
+        "Catherine Palace with Amber Room",
+        "Neva River private cruise",
+        "Fabergé Museum visit",
+        "Mariinsky Theatre ballet",
+        "White Nights experience (seasonal)"
+      ],
+      icon: <GiModernCity className="text-2xl text-purple-600" />
+    },
+    {
+      id: 3,
+      title: "Trans-Siberian Adventure",
+      duration: "14 Days / 13 Nights",
+      price: "₽250,000",
+      rating: 4.7,
+      image: "/images/Russia3.jpeg",
+      type: "adventure",
+      highlights: [
+        "Moscow to Vladivostok journey",
+        "Lake Baikal exploration",
+        "Ural Mountains crossing",
+        "Irkutsk city tour",
+        "Traditional Siberian villages",
+        "Russian train cuisine experience",
+        "Far East cultural immersion"
+      ],
+      icon: <IoMdTrain className="text-2xl text-blue-600" />
+    },
+    {
+      id: 4,
+      title: "Winter Wonderland",
+      duration: "7 Days / 6 Nights",
+      price: "₽90,000",
+      rating: 4.6,
+      image: "/images/Russia4.jpg",
+      type: "seasonal",
+      highlights: [
+        "Ice skating in Red Square",
+        "Winter Kremlin tour",
+        "Russian Christmas traditions",
+        "Troika sleigh rides",
+        "Ice sculptures festival",
+        "Warm Russian cuisine",
+        "Snow activities in countryside"
+      ],
+      icon: <FaSnowflake className="text-2xl text-blue-300" />
+    }
+  ];
+
+  const galleryImages = [
+    "/images/Russia1.jpeg",
+    "/images/Russia2.jpeg",
+    "/images/Russia3.jpeg",
+    "/images/Russia4.jpg",
+    "/images/Russia5.jpeg",
+    "/images/Russia6.webp",
+    "/images/Russia7.webp",
+    "/images/Russia8.jpg",
+  ];
+
+  const filteredPackages = activeTab === 'all' 
+    ? packages 
+    : packages.filter(pkg => pkg.type === activeTab);
+
+  const togglePackage = (id) => {
+    setExpandedPackage(expandedPackage === id ? null : id);
+  };
+
+  const openBookingModal = (pkg) => {
+    setSelectedPackage(pkg);
+    setFormErrors({});
+    setShowPaymentError(false);
+    setIsBookingOpen(true);
+    setSubmitSuccess(false);
+  };
+
+  const closeBookingModal = () => {
+    setIsBookingOpen(false);
+    setSelectedPackage(null);
+    setPaymentProcessing(false);
+    resetForm();
+  };
+
+  const openImageModal = (image) => {
+    setSelectedImage(image);
+  };
+
+  const closeImageModal = () => {
+    setSelectedImage(null);
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    
+    // Clear error when user starts typing
+    if (formErrors[name]) {
+      setFormErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
+  };
+
+  const handleSpecialRequestChange = (e) => {
+    const { name, checked, value } = e.target;
+    if (name === 'other') {
+      setFormData(prev => ({
+        ...prev,
+        specialRequests: {
+          ...prev.specialRequests,
+          other: value
+        }
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        specialRequests: {
+          ...prev.specialRequests,
+          [name]: checked
+        }
+      }));
+    }
+  };
+
+  const handleDateChange = (date, field) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: date
+    }));
+    
+    // Clear error when user selects a date
+    if (formErrors[field]) {
+      setFormErrors(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+    }
+    
+    // Clear departure date error if both dates are now valid
+    if (field === 'arrivalDate' && formData.departureDate && date < formData.departureDate) {
+      setFormErrors(prev => ({
+        ...prev,
+        departureDate: ''
+      }));
+    }
+  };
+
+  const incrementAdults = () => {
+    setFormData(prev => ({
+      ...prev,
+      adults: prev.adults + 1
+    }));
+  };
+
+  const decrementAdults = () => {
+    if (formData.adults > 1) {
+      setFormData(prev => ({
+        ...prev,
+        adults: prev.adults - 1
+      }));
+    }
+  };
+
+  const incrementChildren = () => {
+    setFormData(prev => ({
+      ...prev,
+      children: prev.children + 1
+    }));
+  };
+
+  const decrementChildren = () => {
+    if (formData.children > 0) {
+      setFormData(prev => ({
+        ...prev,
+        children: prev.children - 1
+      }));
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validate form before submission
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      
+      // Scroll to first error
+      const firstErrorField = Object.keys(errors)[0];
+      const errorElement = document.getElementById(firstErrorField);
+      if (errorElement) {
+        errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+    
+    setIsSubmitting(true);
+
+    try {
+      // Send email for booking request
+      await sendBookingEmail('Booking Request');
+      setSubmitSuccess(true);
+      setTimeout(() => {
+        setSubmitSuccess(false);
+        setIsBookingOpen(false);
+        resetForm();
+      }, 3000);
+    } catch (err) {
+      console.log('FAILED...', err);
+      alert('Failed to send message. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-purple-50">
+      {/* Hero Section */}
+      <div className="relative h-96 md:h-screen max-h-[80vh] overflow-hidden">
+        <div className="absolute inset-0 bg-black/40 z-10"></div>
+        <img 
+          src="/images/Russia6.webp"
+          alt="Russia" 
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 flex items-center justify-center z-20 px-4">
+          <div className="text-center max-w-4xl">
+            <motion.h1 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-4xl md:text-6xl font-bold text-white mb-4 drop-shadow-lg"
+            >
+              Discover Russia
+            </motion.h1>
+            <motion.p 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="text-xl md:text-2xl text-white mb-8 drop-shadow-md"
+            >
+              Where history and grandeur meet vast landscapes
+            </motion.p>
+            <motion.button
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl font-bold shadow-xl hover:shadow-2xl transition-all hover:brightness-110"
+              onClick={() => document.getElementById('packages').scrollIntoView({ behavior: 'smooth' })}
+            >
+              Explore Packages
+            </motion.button>
+          </div>
+        </div>
+      </div>
+
+      {/* Introduction Section */}
+      <section className="py-16 px-4 max-w-6xl mx-auto">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">The World's Largest Country</h2>
+          <div className="w-24 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mb-6 rounded-full"></div>
+          <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+            Experience the grandeur of Russia, from the imperial splendor of St. Petersburg to the vast Siberian wilderness. 
+            Discover world-class museums, stunning architecture, and rich cultural traditions in this fascinating country.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-8">
+          {[
+            {
+              icon: <FaLandmark className="text-4xl text-blue-600" />,
+              title: "Historic Cities",
+              desc: "Moscow, St. Petersburg, and the Golden Ring"
+            },
+            {
+              icon: <FaMountain className="text-4xl text-teal-500" />,
+              title: "Vast Landscapes",
+              desc: "From European plains to Siberian taiga"
+            },
+            {
+              icon: <FaCity className="text-4xl text-purple-600" />,
+              title: "Rich Culture",
+              desc: "Ballet, literature, and Orthodox traditions"
+            }
+          ].map((feature, index) => (
+            <motion.div 
+              key={index}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 + index * 0.1 }}
+              className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-shadow text-center border border-gray-100 hover:border-blue-200"
+            >
+              <div className="flex justify-center mb-4">
+                <div className="p-3 bg-blue-50 rounded-full">
+                  {feature.icon}
+                </div>
+              </div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">{feature.title}</h3>
+              <p className="text-gray-600">{feature.desc}</p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* Packages Section */}
+      <section id="packages" className="py-16 px-4 bg-gradient-to-b from-white to-blue-50">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">Tour Packages</h2>
+            <div className="w-24 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mb-6 rounded-full"></div>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+              Choose from our carefully curated packages that showcase the best of Russia.
+            </p>
+          </div>
+
+          {/* Package Tabs */}
+          <div className="flex flex-wrap justify-center gap-3 mb-8">
+            {[
+              { id: 'all', label: 'All Packages' },
+              { id: 'popular', label: 'Popular' },
+              { id: 'luxury', label: 'Luxury' },
+              { id: 'adventure', label: 'Adventure' },
+              { id: 'seasonal', label: 'Seasonal' }
+            ].map(tab => (
+              <motion.button
+                key={tab.id}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className={`px-6 py-2 rounded-full font-medium transition-all ${
+                  activeTab === tab.id
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                    : 'bg-white text-gray-700 border border-gray-200 hover:border-blue-300'
+                }`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </motion.button>
+            ))}
+          </div>
+
+          {/* Package Cards */}
+          <div className="grid md:grid-cols-2 gap-8">
+            {filteredPackages.map(pkg => (
+              <motion.div
+                key={pkg.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="bg-white rounded-xl overflow-hidden shadow-xl hover:shadow-2xl transition-shadow group"
+              >
+                <div className="relative overflow-hidden">
+                  <img 
+                    src={pkg.image} 
+                    alt={pkg.title} 
+                    className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full flex items-center text-yellow-500 font-bold">
+                    <FaStar className="mr-1" />
+                    {pkg.rating}
+                  </div>
+                  <div className="absolute bottom-4 left-4">
+                    <div className="bg-blue-600/90 text-white px-3 py-1 rounded-full text-sm font-medium">
+                      {pkg.duration}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-3">
+                    <h3 className="text-xl font-bold text-gray-800">{pkg.title}</h3>
+                    <div className="flex items-center">
+                      <span className="text-2xl font-bold text-blue-600">{pkg.price}</span>
+                      <span className="text-xs text-gray-500 ml-1">/person</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center mb-4">
+                    <div className="mr-3 p-2 bg-blue-100 rounded-lg">
+                      {pkg.icon}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {pkg.type === 'popular' && 'Popular Tour'}
+                      {pkg.type === 'luxury' && 'Luxury Experience'}
+                      {pkg.type === 'adventure' && 'Adventure Tour'}
+                      {pkg.type === 'seasonal' && 'Seasonal Special'}
+                    </div>
+                  </div>
+
+                  <AnimatePresence>
+                    {expandedPackage === pkg.id && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="mb-4 overflow-hidden"
+                      >
+                        <ul className="space-y-2 pl-2">
+                          {pkg.highlights.map((highlight, i) => (
+                            <li key={i} className="flex items-start">
+                              <span className="text-blue-500 mr-2">✓</span>
+                              <span className="text-gray-700">{highlight}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                    <button
+                      onClick={() => togglePackage(pkg.id)}
+                      className="text-blue-600 hover:text-blue-800 font-medium flex items-center transition-colors"
+                    >
+                      {expandedPackage === pkg.id ? 'Show Less' : 'View Highlights'}
+                      <FaChevronDown className={`ml-2 transition-transform ${expandedPackage === pkg.id ? 'rotate-180' : ''}`} />
+                    </button>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg font-medium shadow-md hover:shadow-lg"
+                      onClick={() => openBookingModal(pkg)}
+                    >
+                      Book Now
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Gallery Section */}
+      <section className="py-16 px-4 bg-gradient-to-b from-blue-50 to-white">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">Discover Russia</h2>
+            <div className="w-24 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mb-6 rounded-full"></div>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+              Witness the diverse beauty of Russia through these stunning visuals.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {galleryImages.map((image, index) => (
+              <motion.div
+                key={index}
+                whileHover={{ scale: 1.02 }}
+                className="relative rounded-xl overflow-hidden cursor-pointer group"
+                onClick={() => openImageModal(image)}
+              >
+                <img 
+                  src={image} 
+                  alt={`Russia ${index + 1}`} 
+                  className="w-full h-40 md:h-56 object-cover transition-transform duration-300 group-hover:scale-110"
+                />
+                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors"></div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Why Choose Us Section */}
+      <section className="py-16 px-4 bg-white">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">Why Choose Our Russian Tours?</h2>
+            <div className="w-24 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mb-6 rounded-full"></div>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {[
+              {
+                icon: <IoMdTrain className="text-4xl text-blue-600" />,
+                title: "Expert Guides",
+                desc: "Native Russian-speaking guides with deep knowledge"
+              },
+              {
+                icon: <FaLandmark className="text-4xl text-purple-600" />,
+                title: "Visa Support",
+                desc: "We assist with Russian visa documentation"
+              },
+              {
+                icon: <FaMountain className="text-4xl text-teal-500" />,
+                title: "Authentic Experiences",
+                desc: "From Kremlin tours to village homestays"
+              },
+              {
+                icon: <FaCity className="text-4xl text-blue-500" />,
+                title: "Cultural Immersion",
+                desc: "Ballet performances, cooking classes, and more"
+              }
+            ].map((item, index) => (
+              <motion.div 
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-shadow border border-gray-100"
+              >
+                <div className="text-4xl mb-4 flex justify-center">
+                  <div className="p-3 bg-blue-50 rounded-full">
+                    {item.icon}
+                  </div>
+                </div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2 text-center">{item.title}</h3>
+                <p className="text-gray-600 text-center">{item.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Booking Modal */}
+      <AnimatePresence>
+        {isBookingOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="relative max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+            >
+              <div className="absolute inset-0 bg-[url('/images/russia-bg.jpg')] bg-cover bg-center opacity-20 rounded-2xl"></div>
+              <div className="relative bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden">
+                <button
+                  onClick={closeBookingModal}
+                  className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 z-10 transition-colors bg-white rounded-full p-2 shadow-md"
+                >
+                  <FaTimes className="text-xl" />
+                </button>
+
+                <div className="grid md:grid-cols-2">
+                  {/* Package Info Side */}
+                  <div className="p-8 bg-gradient-to-b from-blue-600 to-purple-700 text-white relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[url('/images/russia-bg.jpg')] bg-cover bg-center opacity-20 mix-blend-overlay"></div>
+                    <div className="relative z-10">
+                      <h3 className="text-2xl font-bold mb-2">{selectedPackage.title}</h3>
+                      <div className="flex items-center mb-4">
+                        <div className="bg-white/20 px-3 py-1 rounded-full text-sm mr-3">
+                          {selectedPackage.duration}
+                        </div>
+                        <div className="flex items-center">
+                          <FaStar className="text-yellow-300 mr-1" />
+                          <span>{selectedPackage.rating}</span>
+                        </div>
+                      </div>
+
+                      <div className="mb-6">
+                        <h4 className="font-bold mb-2">Package Highlights:</h4>
+                        <ul className="space-y-2">
+                          {selectedPackage.highlights.map((highlight, i) => (
+                            <li key={i} className="flex items-start">
+                              <span className="text-yellow-300 mr-2">✓</span>
+                              <span>{highlight}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/20">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">Package Price:</span>
+                          <span className="text-2xl font-bold">{selectedPackage.price}</span>
+                        </div>
+                        <div className="text-sm opacity-80 mt-1">per person (excluding flights)</div>
+                      </div>
+
+                      <div className="mt-6 space-y-3">
+                        <div className="flex items-center">
+                          <FaPhone className="mr-3 opacity-80" />
+                          <span>+7 495 123 4567</span>
+                        </div>
+                        <div className="flex items-center">
+                          <FaEnvelope className="mr-3 opacity-80" />
+                          <span>info@russiatravel.ru</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Form Side */}
+                  <div className="p-8 bg-white/90 backdrop-blur-sm">
+                    {submitSuccess ? (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="text-center py-8 h-full flex flex-col items-center justify-center"
+                      >
+                        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
+                          <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                          </svg>
+                        </div>
+                        <h3 className="text-2xl font-bold text-gray-800 mb-2">Booking Request Sent!</h3>
+                        <p className="text-gray-600 mb-6">We've received your request for <span className="font-semibold">{selectedPackage.title}</span>. Our travel expert will contact you within 24 hours to confirm your booking.</p>
+                        <button
+                          onClick={closeBookingModal}
+                          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium shadow-md hover:shadow-lg"
+                        >
+                          Close
+                        </button>
+                      </motion.div>
+                    ) : (
+                      <>
+                        <h3 className="text-2xl font-bold text-gray-800 mb-2">Reserve Your Spot</h3>
+                        <p className="text-gray-600 mb-6">Secure your Russian tour today</p>
+                        
+                        {/* Payment Error Alert */}
+                        {showPaymentError && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg"
+                          >
+                            <div className="flex items-center">
+                              <FaExclamationCircle className="text-red-500 mr-3 text-xl" />
+                              <div>
+                                <h4 className="font-bold text-red-800">Please fill all required fields</h4>
+                                <p className="text-red-600 text-sm mt-1">Complete the form before proceeding to payment</p>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                        
+                        {!razorpayLoaded && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
+                          >
+                            <div className="flex items-center">
+                              <FaExclamationCircle className="text-yellow-500 mr-3 text-xl" />
+                              <div>
+                                <h4 className="font-bold text-yellow-800">Payment System Loading</h4>
+                                <p className="text-yellow-600 text-sm mt-1">Payment option will be available in a moment...</p>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                        
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div id="name">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                              <input
+                                type="text"
+                                name="name"
+                                value={formData.name}
+                                onChange={handleChange}
+                                required
+                                className={`w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white/70 ${
+                                  formErrors.name ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                                placeholder="Your name"
+                              />
+                              {formErrors.name && (
+                                <p className="text-red-500 text-xs mt-1 flex items-center">
+                                  <FaExclamationCircle className="mr-1" /> {formErrors.name}
+                                </p>
+                              )}
+                            </div>
+                            <div id="email">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                              <input
+                                type="email"
+                                name="email"
+                                value={formData.email}
+                                onChange={handleChange}
+                                required
+                                className={`w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white/70 ${
+                                  formErrors.email ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                                placeholder="your@email.com"
+                              />
+                              {formErrors.email && (
+                                <p className="text-red-500 text-xs mt-1 flex items-center">
+                                  <FaExclamationCircle className="mr-1" /> {formErrors.email}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div id="phone">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+                            <input
+                              type="tel"
+                              name="phone"
+                              value={formData.phone}
+                              onChange={handleChange}
+                              required
+                              className={`w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white/70 ${
+                                formErrors.phone ? 'border-red-500' : 'border-gray-300'
+                              }`}
+                              placeholder="+7 495 123 4567"
+                            />
+                            {formErrors.phone && (
+                              <p className="text-red-500 text-xs mt-1 flex items-center">
+                                <FaExclamationCircle className="mr-1" /> {formErrors.phone}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div id="adults">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Adults *</label>
+                              <div className={`flex items-center rounded-lg overflow-hidden ${
+                                formErrors.adults ? 'border border-red-500' : ''
+                              }`}>
+                                <button
+                                  type="button"
+                                  onClick={decrementAdults}
+                                  className="bg-gray-200 text-gray-700 px-3 py-2 rounded-l-lg hover:bg-gray-300 transition-colors"
+                                >
+                                  <FaMinus />
+                                </button>
+                                <div className="w-full px-4 py-2 border-t border-b border-gray-300 text-center bg-white">
+                                  {formData.adults}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={incrementAdults}
+                                  className="bg-gray-200 text-gray-700 px-3 py-2 rounded-r-lg hover:bg-gray-300 transition-colors"
+                                >
+                                  <FaPlus />
+                                </button>
+                              </div>
+                              {formErrors.adults && (
+                                <p className="text-red-500 text-xs mt-1 flex items-center">
+                                  <FaExclamationCircle className="mr-1" /> {formErrors.adults}
+                                </p>
+                              )}
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Children</label>
+                              <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={decrementChildren}
+                                  className="bg-gray-200 text-gray-700 px-3 py-2 rounded-l-lg hover:bg-gray-300 transition-colors"
+                                >
+                                  <FaMinus />
+                                </button>
+                                <div className="w-full px-4 py-2 border-t border-b border-gray-300 text-center bg-white">
+                                  {formData.children}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={incrementChildren}
+                                  className="bg-gray-200 text-gray-700 px-3 py-2 rounded-r-lg hover:bg-gray-300 transition-colors"
+                                >
+                                  <FaPlus />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {formData.children > 0 && (
+                            <div id="childrenAges">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Children Ages *</label>
+                              <input
+                                type="text"
+                                name="childrenAges"
+                                value={formData.childrenAges}
+                                onChange={handleChange}
+                                placeholder="e.g. 5, 8, 12"
+                                className={`w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white/70 ${
+                                  formErrors.childrenAges ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                                required={formData.children > 0}
+                              />
+                              {formErrors.childrenAges && (
+                                <p className="text-red-500 text-xs mt-1 flex items-center">
+                                  <FaExclamationCircle className="mr-1" /> {formErrors.childrenAges}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div id="arrivalDate">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Arrival Date *</label>
+                              <DatePicker
+                                selected={formData.arrivalDate}
+                                onChange={(date) => handleDateChange(date, 'arrivalDate')}
+                                selectsStart
+                                startDate={formData.arrivalDate}
+                                endDate={formData.departureDate}
+                                minDate={new Date()}
+                                className={`w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white/70 ${
+                                  formErrors.arrivalDate ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                                required
+                                placeholderText="Select arrival date"
+                              />
+                              {formErrors.arrivalDate && (
+                                <p className="text-red-500 text-xs mt-1 flex items-center">
+                                  <FaExclamationCircle className="mr-1" /> {formErrors.arrivalDate}
+                                </p>
+                              )}
+                            </div>
+                            <div id="departureDate">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Departure Date *</label>
+                              <DatePicker
+                                selected={formData.departureDate}
+                                onChange={(date) => handleDateChange(date, 'departureDate')}
+                                selectsEnd
+                                startDate={formData.arrivalDate}
+                                endDate={formData.departureDate}
+                                minDate={formData.arrivalDate || new Date()}
+                                className={`w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white/70 ${
+                                  formErrors.departureDate ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                                required
+                                placeholderText="Select departure date"
+                              />
+                              {formErrors.departureDate && (
+                                <p className="text-red-500 text-xs mt-1 flex items-center">
+                                  <FaExclamationCircle className="mr-1" /> {formErrors.departureDate}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Accommodation *</label>
+                              <select
+                                name="accommodationType"
+                                value={formData.accommodationType}
+                                onChange={handleChange}
+                                required
+                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white/70"
+                              >
+                                <option value="hotel">Hotel</option>
+                                <option value="homestay">Homestay</option>
+                                <option value="resort">Resort</option>
+                                <option value="apartment">Apartment</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Meals Included *</label>
+                              <select
+                                name="mealsIncluded"
+                                value={formData.mealsIncluded}
+                                onChange={handleChange}
+                                required
+                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white/70"
+                              >
+                                <option value="yes">Yes</option>
+                                <option value="no">No</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div id="budget">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Approximate Budget (without flights) *</label>
+                            <input
+                              type="text"
+                              name="budget"
+                              value={formData.budget}
+                              onChange={handleChange}
+                              className={`w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white/70 ${
+                                formErrors.budget ? 'border-red-500' : 'border-gray-300'
+                              }`}
+                              placeholder="e.g. ₽100,000 - ₽150,000"
+                              required
+                            />
+                            {formErrors.budget && (
+                              <p className="text-red-500 text-xs mt-1 flex items-center">
+                                <FaExclamationCircle className="mr-1" /> {formErrors.budget}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="bg-blue-50/70 p-4 rounded-lg border border-blue-100">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Special Requests</label>
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                              <label className="flex items-center space-x-2 bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors">
+                                <input
+                                  type="checkbox"
+                                  name="cityTour"
+                                  checked={formData.specialRequests.cityTour}
+                                  onChange={handleSpecialRequestChange}
+                                  className="rounded text-blue-600"
+                                />
+                                <span>City Tours</span>
+                              </label>
+                              <label className="flex items-center space-x-2 bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors">
+                                <input
+                                  type="checkbox"
+                                  name="nature"
+                                  checked={formData.specialRequests.nature}
+                                  onChange={handleSpecialRequestChange}
+                                  className="rounded text-blue-600"
+                                />
+                                <span>Nature Experiences</span>
+                              </label>
+                              <label className="flex items-center space-x-2 bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors">
+                                <input
+                                  type="checkbox"
+                                  name="cultural"
+                                  checked={formData.specialRequests.cultural}
+                                  onChange={handleSpecialRequestChange}
+                                  className="rounded text-blue-600"
+                                />
+                                <span>Cultural Experiences</span>
+                              </label>
+                              <label className="flex items-center space-x-2 bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors">
+                                <input
+                                  type="checkbox"
+                                  name="adventure"
+                                  checked={formData.specialRequests.adventure}
+                                  onChange={handleSpecialRequestChange}
+                                  className="rounded text-blue-600"
+                                />
+                                <span>Adventure Activities</span>
+                              </label>
+                            </div>
+                            <input
+                              type="text"
+                              name="other"
+                              value={formData.specialRequests.other}
+                              onChange={handleSpecialRequestChange}
+                              placeholder="Other requests"
+                              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Additional Information</label>
+                            <textarea
+                              name="message"
+                              value={formData.message}
+                              onChange={handleChange}
+                              rows="3"
+                              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white/70"
+                              placeholder="Any additional information or requests..."
+                            ></textarea>
+                          </div>
+
+                          <div className="pt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <motion.button
+                              type="submit"
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              disabled={isSubmitting}
+                              className={`w-full py-4 px-6 rounded-xl font-bold text-white shadow-lg transition-all ${
+                                isSubmitting
+                                  ? 'bg-gray-400'
+                                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'
+                              }`}
+                            >
+                              {isSubmitting ? (
+                                <span className="flex items-center justify-center">
+                                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Processing...
+                                </span>
+                              ) : (
+                                'Confirm Booking Request'
+                              )}
+                            </motion.button>
+                            
+                            {/* Payment Button */}
+                            <motion.button
+                              type="button"
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              disabled={paymentProcessing || !razorpayLoaded}
+                              className={`w-full py-4 px-6 rounded-xl font-bold text-white shadow-lg transition-all ${
+                                paymentProcessing || !razorpayLoaded ? 'opacity-50 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900'
+                              }`}
+                              onClick={paymentHandler}
+                            >
+                              {!razorpayLoaded ? 'Loading Payment...' : paymentProcessing ? 'Processing...' : 'Pay Now'}
+                            </motion.button>
+                          </div>
+
+                          <p className="text-xs text-gray-500 text-center">
+                            By submitting this form, you agree to our <a href="#" className="text-blue-600 hover:underline">Terms of Service</a> and <a href="#" className="text-blue-600 hover:underline">Privacy Policy</a>.
+                          </p>
+                        </form>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Image Modal */}
+      <AnimatePresence>
+        {selectedImage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative max-w-6xl w-full max-h-[90vh]"
+            >
+              <button
+                onClick={closeImageModal}
+                className="absolute -top-12 right-0 text-white hover:text-gray-300 z-10 transition-colors bg-black/50 rounded-full p-2"
+              >
+                <FaTimes className="text-2xl" />
+              </button>
+              <img 
+                src={selectedImage} 
+                alt="Enlarged view" 
+                className="w-full h-full object-contain max-h-[90vh] rounded-lg"
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default Russia;
