@@ -114,6 +114,7 @@ function App() {
             <Route path="/Home" element={<Home />} />
             <Route path="/flights" element={<Flights />} />
             <Route path="/hotels" element={<Hotels />} />
+            <Route path="/hotels-admin" element={<Hotels showAdminLogin={true} />} />
             <Route path="/holidays" element={<Holidays />} />
             <Route path="/Trains" element={<Trains />} />
             <Route path="/Cabs" element={<Cabs />} />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   FiStar, FiFilter, FiChevronDown, FiX, FiMapPin, 
   FiWifi, FiCoffee, FiDroplet, FiHeart, FiClock, 
@@ -1173,8 +1173,9 @@ const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
   );
 });
 
-const Hotels = () => {
+const Hotels = ({ showAdminLogin = false }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [sortBy, setSortBy] = useState('price');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAmenities, setSelectedAmenities] = useState([]);
@@ -1185,7 +1186,7 @@ const Hotels = () => {
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState('');
-  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(showAdminLogin);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showHotelPanel, setShowHotelPanel] = useState(false);
@@ -1455,6 +1456,13 @@ const Hotels = () => {
       fields: ['nearbyAttractions', 'specialFeatures']
     }
   ];
+
+  // Handle admin login modal when accessing via direct admin route
+  useEffect(() => {
+    if (showAdminLogin || location.pathname === '/hotels-admin') {
+      setShowLoginModal(true);
+    }
+  }, [showAdminLogin, location.pathname]);
 
   // Save to localStorage whenever state changes
   useEffect(() => {
@@ -2639,7 +2647,8 @@ const Hotels = () => {
                     <span>Hotel Register</span>
                   </motion.button>
                   
-                  <motion.button
+                  {/* Login button hidden - Access via direct URL: /hotels-admin */}
+                  {/* <motion.button
                     className="bg-rose-600 hover:bg-rose-700 text-white px-6 py-2.5 rounded-lg flex items-center space-x-2 transition-colors shadow-md"
                     onClick={() => setShowLoginModal(true)}
                     whileHover={{ scale: 1.05 }}
@@ -2647,7 +2656,7 @@ const Hotels = () => {
                   >
                     <FiLogIn size={18} />
                     <span>Login</span>
-                  </motion.button>
+                  </motion.button> */}
                 </div>
               )}
             </div>
@@ -3105,8 +3114,8 @@ const Hotels = () => {
                       <FiBriefcase className="mr-2" size={18} />
                       <span>Register Hotel Account</span>
                     </motion.button>
-
-                    <div className="mt-4 text-center">
+ {/* This is done by ms in order to remove the direct login button from hotel reg. form not the direct login button that is differnet... */}
+                    {/* <div className="mt-4 text-center">
                       <p className="text-gray-600">
                         Already have an account?{' '}
                         <button
@@ -3117,7 +3126,7 @@ const Hotels = () => {
                           Login here
                         </button>
                       </p>
-                    </div>
+                    </div> */}
                   </form>
                 </div>
               </motion.div>
