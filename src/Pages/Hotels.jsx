@@ -1173,7 +1173,7 @@ const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
   );
 });
 
-const Hotels = ({ showAdminLogin = false }) => {
+const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [sortBy, setSortBy] = useState('price');
@@ -1187,7 +1187,7 @@ const Hotels = ({ showAdminLogin = false }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState('');
   const [showLoginModal, setShowLoginModal] = useState(showAdminLogin);
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] = useState(showRegister);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showHotelPanel, setShowHotelPanel] = useState(false);
   const [showHotelForm, setShowHotelForm] = useState(false);
@@ -1462,7 +1462,10 @@ const Hotels = ({ showAdminLogin = false }) => {
     if (showAdminLogin || location.pathname === '/hotels-admin') {
       setShowLoginModal(true);
     }
-  }, [showAdminLogin, location.pathname]);
+    if (showRegister || location.pathname === '/hotels-register') {
+      setShowRegisterModal(true);
+    }
+  }, [showAdminLogin, showRegister, location.pathname]);
 
   // Save to localStorage whenever state changes
   useEffect(() => {
@@ -2637,7 +2640,8 @@ const Hotels = ({ showAdminLogin = false }) => {
                 </div>
               ) : (
                 <div className="flex items-center space-x-3">
-                  <motion.button
+                  {/* Hotel Register button hidden - Access via direct URL: /hotels-register */}
+                  {/* <motion.button
                     className="bg-white hover:bg-gray-50 text-rose-600 border border-rose-600 px-6 py-2.5 rounded-lg flex items-center space-x-2 transition-colors shadow-sm"
                     onClick={() => setShowRegisterModal(true)}
                     whileHover={{ scale: 1.05 }}
@@ -2645,7 +2649,7 @@ const Hotels = ({ showAdminLogin = false }) => {
                   >
                     <FiUserPlus size={18} />
                     <span>Hotel Register</span>
-                  </motion.button>
+                  </motion.button> */}
                   
                   {/* Login button hidden - Access via direct URL: /hotels-admin */}
                   {/* <motion.button
@@ -3114,8 +3118,7 @@ const Hotels = ({ showAdminLogin = false }) => {
                       <FiBriefcase className="mr-2" size={18} />
                       <span>Register Hotel Account</span>
                     </motion.button>
- {/* This is done by ms in order to remove the direct login button from hotel reg. form not the direct login button that is differnet... */}
-                    {/* <div className="mt-4 text-center">
+                    <div className="mt-4 text-center">
                       <p className="text-gray-600">
                         Already have an account?{' '}
                         <button
@@ -3126,7 +3129,7 @@ const Hotels = ({ showAdminLogin = false }) => {
                           Login here
                         </button>
                       </p>
-                    </div> */}
+                    </div>
                   </form>
                 </div>
               </motion.div>
