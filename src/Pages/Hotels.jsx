@@ -1413,7 +1413,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       }
     ];
   });
-// Ye changeok
+
   // Admin user
   const [adminUser] = useState({
     id: 999,
