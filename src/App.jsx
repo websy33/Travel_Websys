@@ -45,6 +45,9 @@ import GangtokDarjeeling from './Footer/GangtokDarjeeling.jsx';
 import Ourteam from './Footer/team.jsx';
 import Testimonials from './Footer/Testimonials.jsx';
 import LoginModal from './Components/LoginModal.jsx';
+import AdminApprovalDashboard from './Components/AdminApprovalDashboard.jsx';
+import ProtectedRoute from './auth/ProtectedRoute.jsx';
+import { AuthProvider } from './auth/AuthContext.jsx';
 import Gallery from './Footer/Gallery.jsx';
 import Womens from './Footer/Womens.jsx';
 import Section from './Footer/Section.jsx';
@@ -104,6 +107,7 @@ function App() {
   }, []);
 
   return (
+    <AuthProvider>
     <Router>
       <div className="flex flex-col min-h-screen bg-gray-50">
         <Navbar />
@@ -153,6 +157,11 @@ function App() {
             <Route path="/GangtokDarjeeling" element={<GangtokDarjeeling />} />
             <Route path="/Testimonials" element={<Testimonials />} />
             <Route path="/LoginModal" element={<LoginModal />} />
+            <Route path="/admin/approvals" element={
+              <ProtectedRoute requiredRole="admin">
+                <AdminApprovalDashboard />
+              </ProtectedRoute>
+            } />
             <Route path="/Womens" element={<Womens />} />
             <Route path="/Section" element={<Section />} />
             <Route path="/Weddings" element={<Weddings />} />
@@ -201,6 +210,7 @@ function App() {
         <Footer />
       </div>
     </Router>
+    </AuthProvider>
   );
 }
 
