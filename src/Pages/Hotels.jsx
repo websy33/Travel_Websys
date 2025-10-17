@@ -13,12 +13,23 @@ import {
   FiAlertCircle, FiClock as FiPending, FiBriefcase,
   FiTrendingUp, FiDollarSign as FiDollar, FiPackage,
   FiAward, FiFeather, FiMap, FiNavigation, FiMinus,
-  FiDownload, FiUpload as FiUploadCloud
+  FiDownload, FiUpload as FiUploadCloud, FiFileText
 } from 'react-icons/fi';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import emailjs from '@emailjs/browser';
 import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  sendEmailVerification,
+  updateProfile
+} from 'firebase/auth';
+import { auth, googleProvider } from '../firebase';
 
 // Fixed color animation variants
 const containerVariants = {
@@ -139,6 +150,1493 @@ const LazyImage = ({ src, alt, className, onLoad, ...props }) => {
   );
 };
 
+// Enhanced Input Validation Functions
+const validationRules = {
+  panNumber: (value) => {
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+    if (!panRegex.test(value)) {
+      return 'PAN number must be in format: ABCDE1234F (5 letters, 4 numbers, 1 letter)';
+    }
+    return '';
+  },
+  
+  gstNumber: (value) => {
+    const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    if (!gstRegex.test(value)) {
+      return 'GST number must be in valid format (22ABCDE1234F1Z5)';
+    }
+    return '';
+  },
+  
+  phone: (value) => {
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (!phoneRegex.test(value.replace(/\D/g, ''))) {
+      return 'Please enter a valid 10-digit Indian phone number';
+    }
+    return '';
+  },
+  
+  email: (value) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(value)) {
+      return 'Please enter a valid email address';
+    }
+    return '';
+  },
+  
+  pincode: (value) => {
+    const pincodeRegex = /^\d{6}$/;
+    if (!pincodeRegex.test(value)) {
+      return 'Please enter a valid 6-digit pincode';
+    }
+    return '';
+  },
+  
+  hotelName: (value) => {
+    if (value.length < 3) {
+      return 'Hotel name must be at least 3 characters long';
+    }
+    if (value.length > 100) {
+      return 'Hotel name must be less than 100 characters';
+    }
+    return '';
+  },
+  
+  price: (value) => {
+    const numValue = parseInt(value);
+    if (isNaN(numValue) || numValue < 500) {
+      return 'Price must be at least ₹500';
+    }
+    if (numValue > 1000000) {
+      return 'Price must be less than ₹10,00,000';
+    }
+    return '';
+  }
+};
+
+// Enhanced Input Field Component with Validation
+const EnhancedInput = ({ 
+  label, 
+  value, 
+  onChange, 
+  type = 'text', 
+  placeholder, 
+  required = false,
+  icon: Icon,
+  error,
+  description,
+  validationRule,
+  ...props 
+}) => {
+  const [localError, setLocalError] = useState('');
+
+  const handleChange = (e) => {
+    const newValue = e.target.value;
+    onChange(e);
+    
+    // Validate on change
+    if (validationRule && required && newValue) {
+      const validationError = validationRule(newValue);
+      setLocalError(validationError);
+    } else if (required && !newValue) {
+      setLocalError('This field is required');
+    } else {
+      setLocalError('');
+    }
+  };
+
+  const handleBlur = (e) => {
+    const value = e.target.value;
+    if (validationRule && required && value) {
+      const validationError = validationRule(value);
+      setLocalError(validationError);
+    } else if (required && !value) {
+      setLocalError('This field is required');
+    }
+  };
+
+  const displayError = error || localError;
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-sm font-semibold text-gray-800">
+        {label} {required && <span className="text-rose-500">*</span>}
+      </label>
+      {description && (
+        <p className="text-sm text-gray-600 -mt-1">{description}</p>
+      )}
+      <div className="relative">
+        {Icon && (
+          <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+            <Icon size={18} />
+          </div>
+        )}
+        <input
+          type={type}
+          value={value}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          placeholder={placeholder}
+          className={`w-full p-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 ${
+            Icon ? 'pl-10' : 'pl-3'
+          } ${
+            displayError 
+              ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-200' 
+              : 'border-gray-200 bg-white focus:border-rose-500 focus:ring-rose-200'
+          }`}
+          {...props}
+        />
+      </div>
+      {displayError && (
+        <motion.p 
+          className="text-red-600 text-sm flex items-center space-x-1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <FiAlertCircle size={14} />
+          <span>{displayError}</span>
+        </motion.p>
+      )}
+    </div>
+  );
+};
+
+// Enhanced Document Upload Component with Validation - WEBP Only
+const DocumentUpload = ({ 
+  label, 
+  onDocumentChange, 
+  onDocumentRemove, 
+  document: doc,
+  required = false,
+  description,
+  accept = ".webp,image/webp",
+  maxSize = 100 * 1024,
+  validationRules = {}
+}) => {
+  const [error, setError] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+
+  const validateDocument = (file) => {
+    if (file.type.includes('image') && file.type !== 'image/webp') {
+      return 'Only WEBP images are allowed. Please convert your image to WEBP format.';
+    }
+
+    const validTypes = accept.split(',');
+    if (!validTypes.some(type => file.type.includes(type.replace('.', '')) || validTypes.includes(`.${file.type.split('/')[1]}`))) {
+      return `Please select a valid file type: ${accept}`;
+    }
+
+    if (file.size > maxSize) {
+      return `File size must be less than ${maxSize / 1024}KB`;
+    }
+
+    if (validationRules.panCard) {
+      const panRegex = /[A-Z]{5}[0-9]{4}[A-Z]{1}/;
+      const fileName = file.name.toUpperCase();
+      if (!panRegex.test(fileName.replace(/\.[^/.]+$/, ""))) {
+        return 'PAN card filename should match PAN format (e.g., ABCDE1234F)';
+      }
+    }
+
+    if (validationRules.gstNumber) {
+      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      const fileName = file.name.toUpperCase();
+      if (!gstRegex.test(fileName.replace(/\.[^/.]+$/, ""))) {
+        return 'GST number filename should match GST format';
+      }
+    }
+
+    return '';
+  };
+
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const validationError = validateDocument(file);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setError('');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      onDocumentChange({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        data: e.target.result,
+        uploadedAt: new Date().toISOString()
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+
+    const validationError = validateDocument(file);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setError('');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      onDocumentChange({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        data: e.target.result,
+        uploadedAt: new Date().toISOString()
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const getFileIcon = (fileType) => {
+    if (fileType.includes('image')) return <FiImage size={24} />;
+    if (fileType.includes('pdf')) return <FiFileText size={24} />;
+    return <FiFileText size={24} />;
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-semibold text-gray-800 mb-2">
+          {label} {required && <span className="text-rose-500">*</span>}
+        </label>
+        <p className="text-sm text-gray-600 mb-3">{description}</p>
+      </div>
+
+      {doc ? (
+        <div className="relative group">
+          <div className="rounded-xl border-2 border-green-200 bg-green-50 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="text-green-600">
+                  {getFileIcon(doc.type)}
+                </div>
+                <div>
+                  <p className="font-medium text-gray-800">{doc.name}</p>
+                  <p className="text-sm text-gray-600">{formatFileSize(doc.size)}</p>
+                  <p className="text-xs text-green-600">Uploaded successfully</p>
+                </div>
+              </div>
+              <div className="flex space-x-2">
+                <motion.button
+                  type="button"
+                  onClick={() => document.getElementById(`doc-upload-${label.replace(/\s+/g, '-')}`).click()}
+                  className="bg-white text-rose-600 p-2 rounded-full shadow-lg hover:bg-rose-50 transition-colors"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <FiUpload size={16} />
+                </motion.button>
+                <motion.button
+                  type="button"
+                  onClick={onDocumentRemove}
+                  className="bg-white text-red-600 p-2 rounded-full shadow-lg hover:bg-red-50 transition-colors"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <FiTrash2 size={16} />
+                </motion.button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div
+          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 cursor-pointer ${
+            isDragging 
+              ? 'border-rose-400 bg-rose-50' 
+              : error 
+              ? 'border-red-300 bg-red-50' 
+              : 'border-gray-300 bg-gray-50 hover:border-rose-400 hover:bg-rose-50'
+          }`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => document.getElementById(`doc-upload-${label.replace(/\s+/g, '-')}`).click()}
+        >
+          <input
+            id={`doc-upload-${label.replace(/\s+/g, '-')}`}
+            type="file"
+            accept={accept}
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <div className="space-y-3">
+            <div className={`p-3 rounded-full inline-flex ${
+              error ? 'bg-red-100 text-red-600' : 'bg-rose-100 text-rose-600'
+            }`}>
+              <FiUpload size={24} />
+            </div>
+            <div>
+              <p className="font-medium text-gray-800">
+                Click to upload or drag and drop
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                {accept} (Max {maxSize / 1024}KB)
+              </p>
+            </div>
+            {validationRules.panCard && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-blue-700 text-sm font-medium">
+                  PAN Card Format: ABCDE1234F (5 letters, 4 numbers, 1 letter)
+                </p>
+              </div>
+            )}
+            {validationRules.gstNumber && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="text-green-700 text-sm font-medium">
+                  GST Format: 22ABCDE1234F1Z5 (2 state code, 10 PAN, 1 entity, 1 check digit)
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <motion.div 
+          className="flex items-center space-x-2 text-red-600 bg-red-50 p-3 rounded-lg border border-red-200"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <FiAlertCircle size={16} />
+          <span className="text-sm font-medium">{error}</span>
+        </motion.div>
+      )}
+    </div>
+  );
+};
+
+// Enhanced Review System Component
+const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewForm, setReviewForm] = useState({
+    rating: 5,
+    title: '',
+    comment: '',
+    travelerType: 'Business',
+    stayDate: new Date().toISOString().split('T')[0]
+  });
+  const [reviews, setReviews] = useState(hotel?.reviews || []);
+
+  const handleReviewSubmit = (e) => {
+    e.preventDefault();
+    
+    const newReview = {
+      id: Date.now(),
+      user: currentUser?.name || 'Anonymous',
+      rating: reviewForm.rating,
+      title: reviewForm.title,
+      comment: reviewForm.comment,
+      travelerType: reviewForm.travelerType,
+      stayDate: reviewForm.stayDate,
+      verified: true,
+      date: new Date().toISOString(),
+      helpful: 0
+    };
+
+    const updatedReviews = [newReview, ...reviews];
+    setReviews(updatedReviews);
+    onReviewSubmit?.(updatedReviews);
+    
+    setReviewForm({
+      rating: 5,
+      title: '',
+      comment: '',
+      travelerType: 'Business',
+      stayDate: new Date().toISOString().split('T')[0]
+    });
+    setShowReviewForm(false);
+  };
+
+  const markHelpful = (reviewId) => {
+    setReviews(prev => prev.map(review => 
+      review.id === reviewId 
+        ? { ...review, helpful: (review.helpful || 0) + 1 }
+        : review
+    ));
+  };
+
+  const calculateAverageRating = () => {
+    if (reviews.length === 0) return 0;
+    const total = reviews.reduce((sum, review) => sum + review.rating, 0);
+    return (total / reviews.length).toFixed(1);
+  };
+
+  const getRatingDistribution = () => {
+    const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    reviews.forEach(review => {
+      distribution[review.rating]++;
+    });
+    return distribution;
+  };
+
+  const ratingDistribution = getRatingDistribution();
+
+  return (
+    <div className="space-y-6">
+      {/* Review Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+        <div>
+          <h3 className="text-2xl font-bold text-gray-800">Guest Reviews</h3>
+          <div className="flex items-center space-x-4 mt-2">
+            <div className="flex items-center space-x-2">
+              <div className="bg-amber-500 text-white px-3 py-1 rounded-full flex items-center">
+                <FiStar className="fill-current mr-1" size={16} />
+                <span className="font-bold">{calculateAverageRating()}</span>
+              </div>
+              <span className="text-gray-600">({reviews.length} reviews)</span>
+            </div>
+          </div>
+        </div>
+        
+        {currentUser && (
+          <motion.button
+            onClick={() => setShowReviewForm(true)}
+            className="bg-rose-600 hover:bg-rose-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2 transition-colors"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <FiEdit size={18} />
+            <span>Write a Review</span>
+          </motion.button>
+        )}
+      </div>
+
+      {/* Rating Distribution */}
+      <div className="bg-gray-50 rounded-xl p-6">
+        <h4 className="font-semibold text-gray-800 mb-4">Rating Breakdown</h4>
+        <div className="space-y-3">
+          {[5, 4, 3, 2, 1].map(rating => (
+            <div key={rating} className="flex items-center space-x-3">
+              <span className="text-sm font-medium text-gray-600 w-8">{rating} star</span>
+              <div className="flex-1 bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-amber-500 h-2 rounded-full" 
+                  style={{ 
+                    width: `${reviews.length > 0 ? (ratingDistribution[rating] / reviews.length) * 100 : 0}%` 
+                  }}
+                />
+              </div>
+              <span className="text-sm text-gray-500 w-12">
+                ({ratingDistribution[rating]})
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Review Form Modal */}
+      <AnimatePresence>
+        {showReviewForm && (
+          <motion.div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div 
+              className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl"
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+            >
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-gray-800">Write a Review</h3>
+                  <button 
+                    onClick={() => setShowReviewForm(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <FiX size={24} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleReviewSubmit} className="space-y-6">
+                  {/* Rating */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      Your Rating *
+                    </label>
+                    <div className="flex space-x-1">
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <motion.button
+                          key={star}
+                          type="button"
+                          onClick={() => setReviewForm(prev => ({ ...prev, rating: star }))}
+                          className={`text-2xl ${
+                            star <= reviewForm.rating 
+                              ? 'text-amber-500 fill-current' 
+                              : 'text-gray-300'
+                          }`}
+                          whileHover={{ scale: 1.2 }}
+                          whileTap={{ scale: 0.9 }}
+                        >
+                          <FiStar />
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Stay Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Stay Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={reviewForm.stayDate}
+                      onChange={(e) => setReviewForm(prev => ({ ...prev, stayDate: e.target.value }))}
+                      max={new Date().toISOString().split('T')[0]}
+                      className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Traveler Type */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Traveler Type
+                    </label>
+                    <select
+                      value={reviewForm.travelerType}
+                      onChange={(e) => setReviewForm(prev => ({ ...prev, travelerType: e.target.value }))}
+                      className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                    >
+                      <option value="Business">Business</option>
+                      <option value="Couple">Couple</option>
+                      <option value="Family">Family</option>
+                      <option value="Solo">Solo Traveler</option>
+                      <option value="Friends">Friends</option>
+                    </select>
+                  </div>
+
+                  {/* Review Title */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Review Title *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={reviewForm.title}
+                      onChange={(e) => setReviewForm(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Summarize your experience"
+                      className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Review Comment */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Your Review *
+                    </label>
+                    <textarea
+                      required
+                      value={reviewForm.comment}
+                      onChange={(e) => setReviewForm(prev => ({ ...prev, comment: e.target.value }))}
+                      placeholder="Share details of your experience at this hotel..."
+                      rows={4}
+                      className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none resize-none"
+                    />
+                  </div>
+
+                  <div className="flex space-x-4">
+                    <motion.button
+                      type="button"
+                      onClick={() => setShowReviewForm(false)}
+                      className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-3 rounded-lg transition-colors"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      Cancel
+                    </motion.button>
+                    <motion.button
+                      type="submit"
+                      className="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-3 rounded-lg transition-colors"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      Submit Review
+                    </motion.button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Reviews List */}
+      <div className="space-y-6">
+        {reviews.length === 0 ? (
+          <div className="text-center py-12 bg-gray-50 rounded-xl">
+            <FiStar className="mx-auto text-gray-400 mb-4" size={48} />
+            <h4 className="text-lg font-semibold text-gray-600">No reviews yet</h4>
+            <p className="text-gray-500">Be the first to review this property</p>
+          </div>
+        ) : (
+          reviews.map(review => (
+            <motion.div 
+              key={review.id}
+              className="bg-white border border-gray-200 rounded-xl p-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h4 className="font-bold text-gray-800">{review.title}</h4>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <div className="flex items-center space-x-1">
+                      {[...Array(5)].map((_, i) => (
+                        <FiStar 
+                          key={i}
+                          size={16}
+                          className={i < review.rating ? 'text-amber-500 fill-current' : 'text-gray-300'}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-gray-500">•</span>
+                    <span className="text-gray-600">{review.user}</span>
+                    {review.verified && (
+                      <>
+                        <span className="text-gray-500">•</span>
+                        <span className="text-green-600 text-sm font-medium flex items-center">
+                          <FiCheckCircle size={14} className="mr-1" />
+                          Verified Stay
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <span className="text-gray-500 text-sm">
+                  {new Date(review.date).toLocaleDateString()}
+                </span>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-gray-700">{review.comment}</p>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <div className="flex items-center space-x-4 text-sm text-gray-600">
+                  <span className="bg-gray-100 px-3 py-1 rounded-full">
+                    {review.travelerType}
+                  </span>
+                  <span>Stayed: {new Date(review.stayDate).toLocaleDateString()}</span>
+                </div>
+                
+                <motion.button
+                  onClick={() => markHelpful(review.id)}
+                  className="flex items-center space-x-2 text-gray-500 hover:text-rose-600 transition-colors"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <FiHeart size={16} />
+                  <span>Helpful ({review.helpful || 0})</span>
+                </motion.button>
+              </div>
+            </motion.div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Enhanced Hotel Registration with Document Upload
+const EnhancedHotelRegistration = ({ 
+  showRegisterModal, 
+  setShowRegisterModal, 
+  onHotelRegister,
+  switchToLogin,
+  loading = false
+}) => {
+  const [hotelRegisterForm, setHotelRegisterForm] = useState({
+    hotelName: '',
+    ownerName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    phone: '',
+    address: '',
+    city: '',
+    pincode: '',
+    gstNumber: '',
+    panNumber: ''
+  });
+
+  const [documents, setDocuments] = useState({
+    panCard: null,
+    gstCertificate: null,
+    businessRegistration: null,
+    addressProof: null
+  });
+
+  const [formErrors, setFormErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleHotelRegisterChange = (e) => {
+    const { name, value } = e.target;
+    setHotelRegisterForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    
+    // Clear error when user starts typing
+    if (formErrors[name]) {
+      setFormErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const handleDocumentChange = (docType, document) => {
+    setDocuments(prev => ({
+      ...prev,
+      [docType]: document
+    }));
+  };
+
+  const handleDocumentRemove = (docType) => {
+    setDocuments(prev => ({
+      ...prev,
+      [docType]: null
+    }));
+  };
+
+  const validateForm = () => {
+    const errors = {};
+
+    // Basic field validation
+    if (!hotelRegisterForm.hotelName.trim()) {
+      errors.hotelName = 'Hotel name is required';
+    } else {
+      const nameError = validationRules.hotelName(hotelRegisterForm.hotelName);
+      if (nameError) errors.hotelName = nameError;
+    }
+
+    if (!hotelRegisterForm.ownerName.trim()) {
+      errors.ownerName = 'Owner name is required';
+    }
+
+    if (!hotelRegisterForm.email.trim()) {
+      errors.email = 'Email is required';
+    } else {
+      const emailError = validationRules.email(hotelRegisterForm.email);
+      if (emailError) errors.email = emailError;
+    }
+
+    if (!hotelRegisterForm.password) {
+      errors.password = 'Password is required';
+    } else if (hotelRegisterForm.password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+
+    if (!hotelRegisterForm.confirmPassword) {
+      errors.confirmPassword = 'Please confirm your password';
+    } else if (hotelRegisterForm.password !== hotelRegisterForm.confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match';
+    }
+
+    if (!hotelRegisterForm.phone.trim()) {
+      errors.phone = 'Phone number is required';
+    } else {
+      const phoneError = validationRules.phone(hotelRegisterForm.phone);
+      if (phoneError) errors.phone = phoneError;
+    }
+
+    if (!hotelRegisterForm.address.trim()) {
+      errors.address = 'Address is required';
+    }
+
+    if (!hotelRegisterForm.city.trim()) {
+      errors.city = 'City is required';
+    }
+
+    if (!hotelRegisterForm.pincode.trim()) {
+      errors.pincode = 'Pincode is required';
+    } else {
+      const pincodeError = validationRules.pincode(hotelRegisterForm.pincode);
+      if (pincodeError) errors.pincode = pincodeError;
+    }
+
+    // PAN and GST validation
+    if (hotelRegisterForm.panNumber) {
+      const panError = validationRules.panNumber(hotelRegisterForm.panNumber.toUpperCase());
+      if (panError) errors.panNumber = panError;
+    }
+
+    if (hotelRegisterForm.gstNumber) {
+      const gstError = validationRules.gstNumber(hotelRegisterForm.gstNumber.toUpperCase());
+      if (gstError) errors.gstNumber = gstError;
+    }
+
+    // Document validation
+    if (!documents.panCard) {
+      errors.panCard = 'PAN card document is required';
+    }
+
+    if (!documents.addressProof) {
+      errors.addressProof = 'Address proof document is required';
+    }
+
+    if (!documents.businessRegistration) {
+      errors.businessRegistration = 'Business registration document is required';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      alert('Please fix the errors in the form before submitting.');
+      return;
+    }
+
+    onHotelRegister({
+      ...hotelRegisterForm,
+      documents,
+      registrationDate: new Date().toISOString()
+    });
+  };
+
+  return (
+    <AnimatePresence>
+      {showRegisterModal && (
+        <motion.div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div 
+            className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] shadow-2xl"
+            variants={modalVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            <div className="p-8 overflow-y-auto max-h-[90vh]">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">Hotel Registration</h2>
+                <button 
+                  onClick={() => setShowRegisterModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <FiX size={24} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-8">
+                {/* Basic Information */}
+                <div className="bg-gradient-to-r from-rose-50 to-pink-50 p-6 rounded-2xl border border-rose-100">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <FiBriefcase className="mr-2 text-rose-600" />
+                    Basic Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <EnhancedInput
+                      label="Hotel Name"
+                      name="hotelName"
+                      value={hotelRegisterForm.hotelName}
+                      onChange={handleHotelRegisterChange}
+                      placeholder="Your hotel name"
+                      required
+                      icon={FiAward}
+                      error={formErrors.hotelName}
+                      validationRule={validationRules.hotelName}
+                    />
+
+                    <EnhancedInput
+                      label="Owner Name"
+                      name="ownerName"
+                      value={hotelRegisterForm.ownerName}
+                      onChange={handleHotelRegisterChange}
+                      placeholder="Owner's full name"
+                      required
+                      icon={FiUser}
+                      error={formErrors.ownerName}
+                    />
+
+                    <EnhancedInput
+                      label="Email Address"
+                      name="email"
+                      type="email"
+                      value={hotelRegisterForm.email}
+                      onChange={handleHotelRegisterChange}
+                      placeholder="hotel@example.com"
+                      required
+                      icon={FiMail}
+                      error={formErrors.email}
+                      validationRule={validationRules.email}
+                    />
+
+                    <EnhancedInput
+                      label="Phone Number"
+                      name="phone"
+                      value={hotelRegisterForm.phone}
+                      onChange={handleHotelRegisterChange}
+                      placeholder="+91 1234567890"
+                      required
+                      icon={FiPhone}
+                      error={formErrors.phone}
+                      validationRule={validationRules.phone}
+                    />
+                  </div>
+                </div>
+
+                {/* Address Information */}
+                <div className="bg-gradient-to-r from-blue-50 to-cyan-50 p-6 rounded-2xl border border-blue-100">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <FiMapPin className="mr-2 text-blue-600" />
+                    Address Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="md:col-span-2">
+                      <EnhancedInput
+                        label="Full Address"
+                        name="address"
+                        value={hotelRegisterForm.address}
+                        onChange={handleHotelRegisterChange}
+                        placeholder="Complete hotel address"
+                        required
+                        icon={FiHome}
+                        error={formErrors.address}
+                      />
+                    </div>
+
+                    <EnhancedInput
+                      label="City"
+                      name="city"
+                      value={hotelRegisterForm.city}
+                      onChange={handleHotelRegisterChange}
+                      placeholder="City"
+                      required
+                      icon={FiMap}
+                      error={formErrors.city}
+                    />
+
+                    <EnhancedInput
+                      label="Pincode"
+                      name="pincode"
+                      value={hotelRegisterForm.pincode}
+                      onChange={handleHotelRegisterChange}
+                      placeholder="Pincode"
+                      required
+                      icon={FiMapPin}
+                      error={formErrors.pincode}
+                      validationRule={validationRules.pincode}
+                    />
+                  </div>
+                </div>
+
+                {/* Business Documents */}
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 rounded-2xl border border-green-100">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <FiFileText className="mr-2 text-green-600" />
+                    Business Documents
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <EnhancedInput
+                      label="PAN Number"
+                      name="panNumber"
+                      value={hotelRegisterForm.panNumber}
+                      onChange={handleHotelRegisterChange}
+                      placeholder="ABCDE1234F"
+                      icon={FiCreditCard}
+                      error={formErrors.panNumber}
+                      validationRule={validationRules.panNumber}
+                      description="Business PAN card number"
+                    />
+
+                    <EnhancedInput
+                      label="GST Number"
+                      name="gstNumber"
+                      value={hotelRegisterForm.gstNumber}
+                      onChange={handleHotelRegisterChange}
+                      placeholder="22ABCDE1234F1Z5"
+                      icon={FiTrendingUp}
+                      error={formErrors.gstNumber}
+                      validationRule={validationRules.gstNumber}
+                      description="GST registration number"
+                    />
+                  </div>
+
+                  <div className="space-y-6">
+                    <DocumentUpload
+                      label="PAN Card Document"
+                      document={documents.panCard}
+                      onDocumentChange={(doc) => handleDocumentChange('panCard', doc)}
+                      onDocumentRemove={() => handleDocumentRemove('panCard')}
+                      required
+                      description="Upload scanned copy of PAN card in WEBP format only"
+                      validationRules={{ panCard: true }}
+                      error={formErrors.panCard}
+                    />
+
+                    <DocumentUpload
+                      label="GST Certificate"
+                      document={documents.gstCertificate}
+                      onDocumentChange={(doc) => handleDocumentChange('gstCertificate', doc)}
+                      onDocumentRemove={() => handleDocumentRemove('gstCertificate')}
+                      description="Upload GST certificate in WEBP format only (if applicable)"
+                      validationRules={{ gstNumber: true }}
+                    />
+
+                    <DocumentUpload
+                      label="Business Registration"
+                      document={documents.businessRegistration}
+                      onDocumentChange={(doc) => handleDocumentChange('businessRegistration', doc)}
+                      onDocumentRemove={() => handleDocumentRemove('businessRegistration')}
+                      required
+                      description="Upload business registration certificate in WEBP format only"
+                      error={formErrors.businessRegistration}
+                    />
+
+                    <DocumentUpload
+                      label="Address Proof"
+                      document={documents.addressProof}
+                      onDocumentChange={(doc) => handleDocumentChange('addressProof', doc)}
+                      onDocumentRemove={() => handleDocumentRemove('addressProof')}
+                      required
+                      description="Upload address proof document in WEBP format only"
+                      error={formErrors.addressProof}
+                    />
+                  </div>
+                </div>
+
+                {/* Account Security */}
+                <div className="bg-gradient-to-r from-purple-50 to-violet-50 p-6 rounded-2xl border border-purple-100">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <FiLock className="mr-2 text-purple-600" />
+                    Account Security
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <EnhancedInput
+                        label="Password"
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        value={hotelRegisterForm.password}
+                        onChange={handleHotelRegisterChange}
+                        placeholder="Create a password"
+                        required
+                        icon={FiLock}
+                        error={formErrors.password}
+                      />
+                    </div>
+
+                    <div>
+                      <EnhancedInput
+                        label="Confirm Password"
+                        name="confirmPassword"
+                        type={showPassword ? "text" : "password"}
+                        value={hotelRegisterForm.confirmPassword}
+                        onChange={handleHotelRegisterChange}
+                        placeholder="Confirm your password"
+                        required
+                        icon={FiLock}
+                        error={formErrors.confirmPassword}
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={showPassword}
+                          onChange={() => setShowPassword(!showPassword)}
+                          className="h-4 w-4 text-rose-600 rounded focus:ring-rose-500"
+                        />
+                        <span className="text-sm text-gray-700">Show passwords</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Terms and Conditions */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+                  <h4 className="font-bold text-amber-800 mb-3 flex items-center">
+                    <FiInfo className="mr-2" />
+                    Important Information
+                  </h4>
+                  <ul className="text-amber-700 text-sm space-y-2">
+                    <li>• All documents will be verified before account activation</li>
+                    <li>• PAN card must be in the business name</li>
+                    <li>• Address proof should match the hotel location</li>
+                    <li>• All images must be in WEBP format only</li>
+                    <li>• Registration may take 24-48 hours for verification</li>
+                    <li>• You will be notified via email once approved</li>
+                  </ul>
+                </div>
+
+                <motion.button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 text-white py-4 rounded-xl font-bold text-lg transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={{ scale: loading ? 1 : 1.02 }}
+                  whileTap={{ scale: loading ? 1 : 0.98 }}
+                >
+                  {loading ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  ) : (
+                    <FiBriefcase className="mr-2" size={20} />
+                  )}
+                  <span>{loading ? 'Registering...' : 'Register Hotel Account'}</span>
+                </motion.button>
+
+                <div className="text-center">
+                  <p className="text-gray-600 text-sm">
+                    Already have an account?{' '}
+                    <button
+                      type="button"
+                      className="text-rose-600 hover:text-rose-700 font-medium transition-colors text-sm"
+                      onClick={switchToLogin}
+                    >
+                      Login here
+                    </button>
+                  </p>
+                </div>
+              </form>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+// Enhanced Login Component with Firebase
+const EnhancedLogin = ({ 
+  showLoginModal, 
+  setShowLoginModal, 
+  onLogin,
+  onGoogleLogin,
+  switchToRegister,
+  loading = false
+}) => {
+  const [loginForm, setLoginForm] = useState({
+    email: '',
+    password: '',
+    role: 'hotel'
+  });
+
+  const [formErrors, setFormErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockTime, setLockTime] = useState(0);
+  const [authError, setAuthError] = useState('');
+
+  useEffect(() => {
+    if (isLocked && lockTime > 0) {
+      const timer = setTimeout(() => {
+        setLockTime(lockTime - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (isLocked && lockTime === 0) {
+      setIsLocked(false);
+      setLoginAttempts(0);
+    }
+  }, [isLocked, lockTime]);
+
+  const handleLoginChange = (e) => {
+    const { name, value } = e.target;
+    setLoginForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    
+    if (formErrors[name]) {
+      setFormErrors(prev => ({ ...prev, [name]: '' }));
+    }
+    setAuthError(''); // Clear auth errors when user types
+  };
+
+  const validateForm = () => {
+    const errors = {};
+
+    if (!loginForm.email.trim()) {
+      errors.email = 'Email is required';
+    } else {
+      const emailError = validationRules.email(loginForm.email);
+      if (emailError) errors.email = emailError;
+    }
+
+    if (!loginForm.password) {
+      errors.password = 'Password is required';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (isLocked) {
+      alert(`Account temporarily locked. Please try again in ${lockTime} seconds.`);
+      return;
+    }
+
+    if (!validateForm()) {
+      return;
+    }
+
+    try {
+      const success = await onLogin(loginForm);
+      
+      if (!success) {
+        const newAttempts = loginAttempts + 1;
+        setLoginAttempts(newAttempts);
+        
+        if (newAttempts >= 3) {
+          setIsLocked(true);
+          setLockTime(300); // 5 minutes lock
+          setAuthError('Too many failed attempts. Account locked for 5 minutes.');
+        } else {
+          setAuthError(`Invalid credentials. ${3 - newAttempts} attempts remaining.`);
+        }
+      } else {
+        setLoginAttempts(0);
+        setIsLocked(false);
+        setAuthError('');
+      }
+    } catch (error) {
+      setAuthError(error.message || 'Login failed. Please try again.');
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {showLoginModal && (
+        <motion.div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div 
+            className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh]"
+            variants={modalVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            <div className="p-8 overflow-y-auto max-h-[90vh]">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">
+                  {isLocked ? 'Account Locked' : 'Login to KashmirStays'}
+                </h2>
+                <button 
+                  onClick={() => setShowLoginModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <FiX size={24} />
+                </button>
+              </div>
+
+              {isLocked ? (
+                <div className="text-center py-8">
+                  <FiLock className="text-red-500 mx-auto mb-4" size={48} />
+                  <h3 className="text-lg font-bold text-gray-800 mb-2">Temporary Lock</h3>
+                  <p className="text-gray-600 mb-4">
+                    Too many failed login attempts. Please try again in:
+                  </p>
+                  <div className="text-2xl font-bold text-rose-600 mb-6">
+                    {Math.floor(lockTime / 60)}:{(lockTime % 60).toString().padStart(2, '0')}
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    For immediate assistance, contact support@kashmirstays.com
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {authError && (
+                    <motion.div 
+                      className="bg-red-50 border border-red-200 rounded-lg p-3"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                    >
+                      <div className="flex items-center space-x-2 text-red-700">
+                        <FiAlertCircle size={16} />
+                        <span className="text-sm font-medium">{authError}</span>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  <EnhancedInput
+                    label="Email Address"
+                    name="email"
+                    type="email"
+                    value={loginForm.email}
+                    onChange={handleLoginChange}
+                    placeholder="your@email.com"
+                    required
+                    icon={FiMail}
+                    error={formErrors.email}
+                    validationRule={validationRules.email}
+                  />
+
+                  <EnhancedInput
+                    label="Password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    value={loginForm.password}
+                    onChange={handleLoginChange}
+                    placeholder="Enter your password"
+                    required
+                    icon={FiLock}
+                    error={formErrors.password}
+                  />
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Login As</label>
+                    <select
+                      name="role"
+                      className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
+                      value={loginForm.role}
+                      onChange={handleLoginChange}
+                    >
+                      <option value="hotel">Hotel</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={showPassword}
+                        onChange={() => setShowPassword(!showPassword)}
+                        className="h-4 w-4 text-rose-600 rounded focus:ring-rose-500"
+                      />
+                      <span className="text-sm text-gray-700">Show password</span>
+                    </label>
+                    
+                    <button
+                      type="button"
+                      className="text-sm text-rose-600 hover:text-rose-700 transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+
+                  {loginAttempts > 0 && !authError && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                      <p className="text-yellow-700 text-sm text-center">
+                        {3 - loginAttempts} login attempts remaining
+                      </p>
+                    </div>
+                  )}
+
+                  <motion.button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 text-white py-3.5 rounded-lg font-medium transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    whileHover={{ scale: loading ? 1 : 1.02 }}
+                    whileTap={{ scale: loading ? 1 : 0.98 }}
+                  >
+                    {loading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <FiLogIn className="mr-2" size={18} />
+                    )}
+                    <span>{loading ? 'Signing in...' : 'Login to Account'}</span>
+                  </motion.button>
+
+                  {loginForm.role === 'hotel' && (
+                    <>
+                      <div className="relative my-6">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-gray-300"></div>
+                        </div>
+                        <div className="relative flex justify-center text-sm">
+                          <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                        </div>
+                      </div>
+
+                      <motion.button
+                        type="button"
+                        onClick={onGoogleLogin}
+                        disabled={loading}
+                        className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 py-3.5 rounded-lg font-medium transition-all duration-300 shadow-md hover:shadow-lg flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                        whileHover={{ scale: loading ? 1 : 1.02 }}
+                        whileTap={{ scale: loading ? 1 : 0.98 }}
+                      >
+                        {loading ? (
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+                        ) : (
+                          <svg className="w-5 h-5" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                          </svg>
+                        )}
+                        <span>{loading ? 'Signing in...' : 'Sign in with Google'}</span>
+                      </motion.button>
+                    </>
+                  )}
+
+                  <div className="text-center">
+                    <p className="text-gray-600">
+                      Don't have an account?{' '}
+                      <button
+                        type="button"
+                        className="text-rose-600 hover:text-rose-700 font-medium transition-colors"
+                        onClick={switchToRegister}
+                      >
+                        Register your hotel
+                      </button>
+                    </p>
+                  </div>
+
+
+                </form>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
 // Enhanced amenity icons
 const amenityIcons = {
   'Free WiFi': <FiWifi className="mr-2 text-rose-500 text-lg" />,
@@ -198,10 +1696,13 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
         date.setDate(today.getDate() + i);
         const dateString = date.toISOString().split('T')[0];
         defaultData[dateString] = {
-          available: true,
+          status: 'available', // available, booked, blocked
           totalRooms: room?.totalRooms || 10,
           bookedRooms: 0,
-          price: room?.price || 0
+          blockedRooms: 0,
+          price: room?.price || 0,
+          clientName: '',
+          bookingReference: ''
         };
       }
       setAvailabilityData(defaultData);
@@ -290,11 +1791,13 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
     if (date < today) {
       classes += 'bg-gray-100 text-gray-400 cursor-not-allowed ';
     } else if (dayData) {
-      const availableRooms = dayData.totalRooms - dayData.bookedRooms;
+      const availableRooms = dayData.totalRooms - dayData.bookedRooms - (dayData.blockedRooms || 0);
       
-      if (!dayData.available || availableRooms === 0) {
+      if (dayData.status === 'blocked') {
+        classes += 'bg-orange-500 text-white hover:bg-orange-600 ';
+      } else if (dayData.status === 'booked' || availableRooms === 0) {
         classes += 'bg-red-500 text-white hover:bg-red-600 ';
-      } else if (availableRooms > 0) {
+      } else if (dayData.status === 'available' && availableRooms > 0) {
         classes += 'bg-green-500 text-white hover:bg-green-600 ';
       } else {
         classes += 'bg-gray-200 text-gray-600 hover:bg-gray-300 ';
@@ -376,11 +1879,15 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
       <div className="flex flex-wrap gap-4 mb-6 text-xs">
         <div className="flex items-center space-x-2">
           <div className="w-3 h-3 bg-green-500 rounded"></div>
-          <span>Available Rooms</span>
+          <span>Available</span>
         </div>
         <div className="flex items-center space-x-2">
           <div className="w-3 h-3 bg-red-500 rounded"></div>
-          <span>Booked/Sold Out</span>
+          <span>Booked</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <div className="w-3 h-3 bg-orange-500 rounded"></div>
+          <span>Blocked</span>
         </div>
         <div className="flex items-center space-x-2">
           <div className="w-3 h-3 bg-gray-400 rounded"></div>
@@ -456,46 +1963,58 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
               {(() => {
                 const dateString = selectedDate.toISOString().split('T')[0];
                 const dayData = availabilityData[dateString] || {
-                  available: true,
+                  status: 'available',
                   totalRooms: room?.totalRooms || 10,
                   bookedRooms: 0,
-                  price: room?.price || 0
+                  blockedRooms: 0,
+                  price: room?.price || 0,
+                  clientName: '',
+                  bookingReference: ''
                 };
-                const availableRooms = dayData.totalRooms - dayData.bookedRooms;
+                const availableRooms = dayData.totalRooms - dayData.bookedRooms - (dayData.blockedRooms || 0);
 
                 return (
                   <div className="space-y-4">
                     <div className={`p-3 rounded-lg ${
-                      !dayData.available || availableRooms === 0
+                      dayData.status === 'blocked'
+                        ? 'bg-orange-50 border border-orange-200'
+                        : dayData.status === 'booked' || availableRooms === 0
                         ? 'bg-red-50 border border-red-200' 
                         : 'bg-green-50 border border-green-200'
                     }`}>
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-gray-700">Status:</span>
-                        <span className={`font-bold ${
-                          !dayData.available || availableRooms === 0
+                        <span className={`font-bold capitalize ${
+                          dayData.status === 'blocked'
+                            ? 'text-orange-600'
+                            : dayData.status === 'booked' || availableRooms === 0
                             ? 'text-red-600'
                             : 'text-green-600'
                         }`}>
-                          {!dayData.available || availableRooms === 0 ? 'Not Available' : 'Available'}
+                          {dayData.status === 'blocked' ? 'Blocked' : 
+                           dayData.status === 'booked' || availableRooms === 0 ? 'Booked' : 'Available'}
                         </span>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-3">
                       <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                        <div className="text-blue-600 text-sm font-medium">Total Rooms</div>
-                        <div className="text-2xl font-bold text-blue-700">{dayData.totalRooms}</div>
+                        <div className="text-blue-600 text-sm font-medium">Total</div>
+                        <div className="text-xl font-bold text-blue-700">{dayData.totalRooms}</div>
                       </div>
                       <div className="bg-green-50 p-3 rounded-lg border border-green-200">
                         <div className="text-green-600 text-sm font-medium">Available</div>
-                        <div className="text-2xl font-bold text-green-700">{availableRooms}</div>
+                        <div className="text-xl font-bold text-green-700">{availableRooms}</div>
+                      </div>
+                      <div className="bg-red-50 p-3 rounded-lg border border-red-200">
+                        <div className="text-red-600 text-sm font-medium">Booked</div>
+                        <div className="text-xl font-bold text-red-700">{dayData.bookedRooms}</div>
                       </div>
                     </div>
 
-                    <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
-                      <div className="text-amber-600 text-sm font-medium">Booked Rooms</div>
-                      <div className="text-2xl font-bold text-amber-700">{dayData.bookedRooms}</div>
+                    <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+                      <div className="text-orange-600 text-sm font-medium">Blocked Rooms</div>
+                      <div className="text-2xl font-bold text-orange-700">{dayData.blockedRooms || 0}</div>
                     </div>
 
                     <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
@@ -505,57 +2024,114 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
                       </div>
                     </div>
 
+                    {dayData.clientName && (
+                      <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+                        <div className="text-indigo-600 text-sm font-medium">Client Name</div>
+                        <div className="text-lg font-bold text-indigo-700">{dayData.clientName}</div>
+                        {dayData.bookingReference && (
+                          <div className="text-sm text-indigo-600 mt-1">Ref: {dayData.bookingReference}</div>
+                        )}
+                      </div>
+                    )}
+
                     {isEditable && (
                       <div className="space-y-3 pt-4 border-t border-gray-200">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Total Rooms
+                            Room Status
                           </label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={dayData.totalRooms}
-                            onChange={(e) => updateAvailability(selectedDate, 'totalRooms', parseInt(e.target.value) || 0)}
+                          <select
+                            value={dayData.status}
+                            onChange={(e) => updateAvailability(selectedDate, 'status', e.target.value)}
                             className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
+                          >
+                            <option value="available">Available</option>
+                            <option value="booked">Booked</option>
+                            <option value="blocked">Blocked</option>
+                          </select>
                         </div>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Total Rooms
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={dayData.totalRooms}
+                              onChange={(e) => updateAvailability(selectedDate, 'totalRooms', parseInt(e.target.value) || 0)}
+                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Booked Rooms
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max={dayData.totalRooms}
+                              value={dayData.bookedRooms}
+                              onChange={(e) => updateAvailability(selectedDate, 'bookedRooms', parseInt(e.target.value) || 0)}
+                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Blocked Rooms
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max={dayData.totalRooms}
+                              value={dayData.blockedRooms || 0}
+                              onChange={(e) => updateAvailability(selectedDate, 'blockedRooms', parseInt(e.target.value) || 0)}
+                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Price (₹)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={dayData.price || 0}
+                              onChange={(e) => updateAvailability(selectedDate, 'price', parseInt(e.target.value) || 0)}
+                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+                        
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Booked Rooms
+                            Client Name
                           </label>
                           <input
-                            type="number"
-                            min="0"
-                            max={dayData.totalRooms}
-                            value={dayData.bookedRooms}
-                            onChange={(e) => updateAvailability(selectedDate, 'bookedRooms', parseInt(e.target.value) || 0)}
+                            type="text"
+                            value={dayData.clientName || ''}
+                            onChange={(e) => updateAvailability(selectedDate, 'clientName', e.target.value)}
+                            placeholder="Enter client name (for bookings)"
                             className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           />
                         </div>
+                        
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Price (₹)
+                            Booking Reference
                           </label>
                           <input
-                            type="number"
-                            min="0"
-                            value={dayData.price || 0}
-                            onChange={(e) => updateAvailability(selectedDate, 'price', parseInt(e.target.value) || 0)}
+                            type="text"
+                            value={dayData.bookingReference || ''}
+                            onChange={(e) => updateAvailability(selectedDate, 'bookingReference', e.target.value)}
+                            placeholder="Enter booking reference number"
                             className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           />
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id="available"
-                            checked={dayData.available}
-                            onChange={(e) => updateAvailability(selectedDate, 'available', e.target.checked)}
-                            className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
-                          />
-                          <label htmlFor="available" className="text-sm font-medium text-gray-700">
-                            Available for booking
-                          </label>
                         </div>
                       </div>
                     )}
@@ -574,7 +2150,7 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
           animate={{ opacity: 1, y: 0 }}
         >
           <h4 className="font-semibold text-blue-800 mb-3">Quick Actions</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <motion.button
               onClick={() => {
                 const today = new Date();
@@ -585,8 +2161,9 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
                   const dateString = date.toISOString().split('T')[0];
                   updates[dateString] = {
                     ...availabilityData[dateString],
-                    available: true,
-                    bookedRooms: 0
+                    status: 'available',
+                    bookedRooms: 0,
+                    blockedRooms: 0
                   };
                 }
                 const updatedData = { ...availabilityData, ...updates };
@@ -611,7 +2188,34 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
                   const dateString = date.toISOString().split('T')[0];
                   updates[dateString] = {
                     ...availabilityData[dateString],
-                    available: false
+                    status: 'blocked'
+                  };
+                }
+                const updatedData = { ...availabilityData, ...updates };
+                setAvailabilityData(updatedData);
+                onAvailabilityUpdate?.(updatedData);
+              }}
+              className="bg-orange-600 hover:bg-orange-700 text-white py-2 px-4 rounded-lg text-sm transition-colors flex items-center justify-center space-x-2"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <FiX size={16} />
+              <span>Block Next 7 Days</span>
+            </motion.button>
+            
+            <motion.button
+              onClick={() => {
+                const today = new Date();
+                const updates = {};
+                for (let i = 0; i < 14; i++) {
+                  const date = new Date(today);
+                  date.setDate(today.getDate() + i);
+                  const dateString = date.toISOString().split('T')[0];
+                  updates[dateString] = {
+                    ...availabilityData[dateString],
+                    status: 'booked',
+                    clientName: 'Walk-in Guest',
+                    bookingReference: `WI-${Date.now()}`
                   };
                 }
                 const updatedData = { ...availabilityData, ...updates };
@@ -622,8 +2226,8 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
-              <FiX size={16} />
-              <span>Close Next 7 Days</span>
+              <FiUser size={16} />
+              <span>Book Next 14 Days</span>
             </motion.button>
           </div>
         </motion.div>
@@ -759,7 +2363,7 @@ const FormStep = ({ number, title, description, isActive, isCompleted, onClick }
   </motion.div>
 );
 
-// Image Upload Component with Validation - WEBP Only
+// WEBP Only Image Upload Component with Validation
 const ImageUploadWithPreview = ({ 
   image, 
   onImageChange, 
@@ -773,9 +2377,9 @@ const ImageUploadWithPreview = ({
   const [isDragging, setIsDragging] = useState(false);
 
   const validateImage = (file) => {
-    const validTypes = ['image/webp']; // Only WEBP allowed
-    if (!validTypes.includes(file.type)) {
-      return 'Please select a WEBP image only';
+    // Only allow WEBP format
+    if (file.type !== 'image/webp') {
+      return 'Please select a WEBP image only. Other formats are not allowed.';
     }
 
     if (file.size > 100 * 1024) {
@@ -895,7 +2499,7 @@ const ImageUploadWithPreview = ({
           </div>
           <div className="mt-2 flex items-center text-green-600 text-sm">
             <FiCheckCircle className="mr-1" size={16} />
-            <span>Image uploaded successfully ({(image.length / 1024).toFixed(1)}KB)</span>
+            <span>WEBP image uploaded successfully ({(image.length / 1024).toFixed(1)}KB)</span>
           </div>
         </div>
       ) : (
@@ -915,7 +2519,7 @@ const ImageUploadWithPreview = ({
           <input
             id="image-upload"
             type="file"
-            accept="image/webp" // Only WEBP accepted
+            accept=".webp,image/webp" // Only WEBP accepted
             className="hidden"
             onChange={handleFileChange}
           />
@@ -930,13 +2534,13 @@ const ImageUploadWithPreview = ({
                 Click to upload or drag and drop
               </p>
               <p className="text-sm text-gray-600 mt-1">
-                WEBP only (Max 100KB, Min 150x150px) {/* Updated text */}
+                WEBP format only (Max 100KB, Min 150x150px)
               </p>
             </div>
             <div className="flex justify-center space-x-4 text-xs text-gray-500">
               <div className="flex items-center">
                 <FiCheck className="mr-1" size={12} />
-                <span>Min 150px</span>
+                <span>WEBP Only</span>
               </div>
               <div className="flex items-center">
                 <FiCheck className="mr-1" size={12} />
@@ -944,7 +2548,7 @@ const ImageUploadWithPreview = ({
               </div>
               <div className="flex items-center">
                 <FiCheck className="mr-1" size={12} />
-                <span>WEBP format</span> {/* Updated text */}
+                <span>Min 150px</span>
               </div>
             </div>
           </div>
@@ -964,60 +2568,6 @@ const ImageUploadWithPreview = ({
     </div>
   );
 };
-
-// Enhanced Input Field Component
-const EnhancedInput = ({ 
-  label, 
-  value, 
-  onChange, 
-  type = 'text', 
-  placeholder, 
-  required = false,
-  icon: Icon,
-  error,
-  description,
-  ...props 
-}) => (
-  <div className="space-y-2">
-    <label className="block text-sm font-semibold text-gray-800">
-      {label} {required && <span className="text-rose-500">*</span>}
-    </label>
-    {description && (
-      <p className="text-sm text-gray-600 -mt-1">{description}</p>
-    )}
-    <div className="relative">
-      {Icon && (
-        <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-          <Icon size={18} />
-        </div>
-      )}
-      <input
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className={`w-full p-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 ${
-          Icon ? 'pl-10' : 'pl-3'
-        } ${
-          error 
-            ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-200' 
-            : 'border-gray-200 bg-white focus:border-rose-500 focus:ring-rose-200'
-        }`}
-        {...props}
-      />
-    </div>
-    {error && (
-      <motion.p 
-        className="text-red-600 text-sm flex items-center space-x-1"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-      >
-        <FiAlertCircle size={14} />
-        <span>{error}</span>
-      </motion.p>
-    )}
-  </div>
-);
 
 // Enhanced Textarea Component
 const EnhancedTextarea = ({ 
@@ -1176,6 +2726,10 @@ const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
 const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  // Firebase state
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [firebaseLoading, setFirebaseLoading] = useState(true);
+  const [googleSignInInProgress, setGoogleSignInInProgress] = useState(false);
   const [sortBy, setSortBy] = useState('price');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAmenities, setSelectedAmenities] = useState([]);
@@ -1288,6 +2842,11 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     contact: {
       phone: '',
       email: ''
+    },
+    declaration: {
+      termsAccepted: false,
+      dataAccuracy: false,
+      marketingConsent: false
     },
     status: 'pending',
     submittedBy: '',
@@ -1454,8 +3013,331 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       title: "Additional Details",
       description: "Nearby attractions and special features",
       fields: ['nearbyAttractions', 'specialFeatures']
+    },
+    {
+      number: 6,
+      title: "Declaration & Submit",
+      description: "Review and confirm your submission",
+      fields: ['declaration']
     }
   ];
+
+  // Firebase Authentication Integration
+  useEffect(() => {
+    let unsubscribe;
+    
+    try {
+      unsubscribe = onAuthStateChanged(auth, (user) => {
+        setFirebaseLoading(true);
+        try {
+          if (user) {
+            setFirebaseUser({
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName,
+              emailVerified: user.emailVerified,
+              photoURL: user.photoURL
+            });
+            
+            const hotelUser = hotelUsers.find(u => u.email === user.email);
+            const existingUser = {
+              id: user.uid,
+              email: user.email,
+              name: user.displayName || user.email.split('@')[0],
+              role: 'hotel',
+              hotelName: hotelUser?.hotelName || 'Hotel Owner',
+              emailVerified: user.emailVerified,
+              hotels: hotelUser?.hotels || [],
+              ...hotelUser
+            };
+            
+            setCurrentUser(existingUser);
+            setIsAuthenticated(true);
+            setUserRole('hotel');
+            
+            localStorage.setItem('currentUser', JSON.stringify(existingUser));
+            localStorage.setItem('isAuthenticated', 'true');
+            localStorage.setItem('userRole', 'hotel');
+            localStorage.setItem('firebaseUID', user.uid);
+          } else {
+            setFirebaseUser(null);
+          }
+        } catch (error) {
+          console.error('Auth state change error:', error);
+        } finally {
+          setFirebaseLoading(false);
+          setGoogleSignInInProgress(false);
+        }
+      });
+    } catch (error) {
+      console.error('Firebase auth setup error:', error);
+      setFirebaseLoading(false);
+    }
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+      setGoogleSignInInProgress(false);
+    };
+  }, [hotelUsers]);
+
+  // Enhanced Firebase Login Handler with Email Verification
+  const handleFirebaseLogin = async (email, password, role = 'hotel') => {
+    setLoading(true);
+    
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Check email verification for hotel users
+      if (role === 'hotel' && !user.emailVerified) {
+        await sendEmailVerification(user);
+        throw new Error('Please verify your email address. A new verification email has been sent.');
+      }
+      
+      // Check if user exists in hotelUsers for role verification
+      const hotelUser = hotelUsers.find(u => u.email === email);
+      
+      if (role === 'admin' && email !== 'admin@traveligo.com') {
+        throw new Error('Admin access denied');
+      }
+      
+      const userData = {
+        uid: user.uid,
+        id: hotelUser?.id || user.uid,
+        email: user.email,
+        name: hotelUser?.ownerName || user.displayName || user.email.split('@')[0],
+        role: role,
+        hotelName: hotelUser?.hotelName || 'Hotel Owner',
+        emailVerified: user.emailVerified,
+        ...hotelUser
+      };
+      
+      return userData;
+    } catch (error) {
+      console.error('Firebase login error:', error);
+      let errorMessage = 'Login failed. Please try again.';
+      
+      switch (error.code) {
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address.';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'This account has been disabled.';
+          break;
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email.';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Incorrect password.';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Too many failed attempts. Please try again later.';
+          break;
+        case 'auth/invalid-credential':
+          errorMessage = 'Invalid email or password.';
+          break;
+        default:
+          errorMessage = error.message || 'Login failed. Please try again.';
+      }
+      
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Enhanced Google Sign-In Handler with Better Error Handling
+  const handleGoogleSignIn = async () => {
+    if (loading || googleSignInInProgress) return null;
+    
+    setLoading(true);
+    setGoogleSignInInProgress(true);
+    
+    try {
+      // Clear any existing auth state
+      await signOut(auth).catch(() => {});
+      
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ 
+        prompt: 'select_account',
+        hd: undefined // Allow any domain
+      });
+      
+      // Add required scopes
+      provider.addScope('email');
+      provider.addScope('profile');
+      
+      console.log('Attempting Google sign-in...');
+      
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      console.log('Google sign-in successful:', user.email);
+      
+      const userData = {
+        uid: user.uid,
+        id: user.uid,
+        email: user.email,
+        name: user.displayName || user.email.split('@')[0],
+        role: 'hotel',
+        hotelName: `${user.displayName || 'User'}'s Hotel`,
+        photoURL: user.photoURL,
+        emailVerified: user.emailVerified,
+        hotels: []
+      };
+      
+      return userData;
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      
+      let errorMessage = 'Google sign-in failed. Please try again.';
+      
+      switch (error.code) {
+        case 'auth/popup-closed-by-user':
+          console.log('User closed the popup');
+          return null;
+        case 'auth/popup-blocked':
+          errorMessage = 'Popup was blocked by browser. Please allow popups and try again.';
+          break;
+        case 'auth/cancelled-popup-request':
+          console.log('Popup request was cancelled');
+          return null;
+        case 'auth/network-request-failed':
+          errorMessage = 'Network error. Please check your internet connection.';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Too many requests. Please try again later.';
+          break;
+        case 'auth/unauthorized-domain':
+          errorMessage = 'This domain is not authorized for Google sign-in.';
+          break;
+        default:
+          errorMessage = error.message || 'Google sign-in failed. Please try again.';
+      }
+      
+      alert(errorMessage);
+      return null;
+    } finally {
+      setLoading(false);
+      setGoogleSignInInProgress(false);
+    }
+  };
+
+  // Enhanced Firebase Registration Handler with Email Verification
+  const handleFirebaseRegister = async (registrationData) => {
+    setLoading(true);
+    
+    try {
+      // Create user in Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(
+        auth, 
+        registrationData.email, 
+        registrationData.password
+      );
+      const user = userCredential.user;
+
+      // Update user profile with display name
+      await updateProfile(user, {
+        displayName: registrationData.ownerName
+      });
+
+      // Send email verification
+      await sendEmailVerification(user, {
+        url: window.location.origin + '/hotels',
+        handleCodeInApp: false
+      });
+
+      // Create hotel user in local storage system
+      const newHotelUser = {
+        id: user.uid,
+        hotelName: registrationData.hotelName,
+        ownerName: registrationData.ownerName,
+        email: registrationData.email,
+        password: registrationData.password,
+        role: 'hotel',
+        phone: registrationData.phone,
+        address: registrationData.address,
+        city: registrationData.city,
+        pincode: registrationData.pincode,
+        gstNumber: registrationData.gstNumber,
+        panNumber: registrationData.panNumber,
+        documents: registrationData.documents,
+        hotels: [],
+        registrationDate: new Date().toISOString(),
+        status: 'pending',
+        firebaseUID: user.uid,
+        emailVerified: user.emailVerified
+      };
+
+      // Add to hotelUsers array
+      setHotelUsers(prev => [...prev, newHotelUser]);
+
+      // Set as current user
+      const userData = {
+        uid: user.uid,
+        id: user.uid,
+        email: user.email,
+        name: registrationData.ownerName,
+        role: 'hotel',
+        hotelName: registrationData.hotelName,
+        emailVerified: user.emailVerified,
+        ...newHotelUser
+      };
+
+      return userData;
+    } catch (error) {
+      console.error('Firebase registration error:', error);
+      let errorMessage = 'Registration failed. Please try again.';
+      
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          errorMessage = 'An account with this email already exists.';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address.';
+          break;
+        case 'auth/operation-not-allowed':
+          errorMessage = 'Email/password accounts are not enabled.';
+          break;
+        case 'auth/weak-password':
+          errorMessage = 'Password is too weak. Please use at least 6 characters.';
+          break;
+        default:
+          errorMessage = error.message || 'Registration failed. Please try again.';
+      }
+      
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Enhanced Logout Handler
+  const handleFirebaseLogout = async () => {
+    try {
+      setGoogleSignInInProgress(false); // Reset any pending sign-in state
+      await signOut(auth);
+      setFirebaseUser(null);
+      
+      // Also clear local storage
+      setIsAuthenticated(false);
+      setUserRole('');
+      setCurrentUser(null);
+      
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('userRole');
+      localStorage.removeItem('firebaseUID');
+      
+      setShowAdminPanel(false);
+      setShowHotelPanel(false);
+      setShowHotelForm(false);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   // Handle admin login modal when accessing via direct admin route
   useEffect(() => {
@@ -1506,6 +3388,12 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     } catch (error) {
       console.warn('EmailJS initialization failed:', error);
     }
+
+    // Cleanup function for component unmount
+    return () => {
+      setGoogleSignInInProgress(false);
+      setLoading(false);
+    };
   }, []);
 
   // Data Export/Import Functions
@@ -1608,17 +3496,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
   // Handle logout function
   const handleLogout = () => {
-    setIsAuthenticated(false);
-    setUserRole('');
-    setCurrentUser(null);
-    
-    localStorage.removeItem('currentUser');
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('userRole');
-    
-    setShowAdminPanel(false);
-    setShowHotelPanel(false);
-    setShowHotelForm(false);
+    handleFirebaseLogout();
   };
 
   // Form validation functions
@@ -1660,6 +3538,11 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       if (!hotelForm.contact.email.trim()) errors.email = 'Contact email is required';
       if (!hotelForm.policies.checkIn.trim()) errors.checkIn = 'Check-in time is required';
       if (!hotelForm.policies.checkOut.trim()) errors.checkOut = 'Check-out time is required';
+    }
+
+    if (step === 6) {
+      if (!hotelForm.declaration.termsAccepted) errors.termsAccepted = 'You must accept the terms and conditions';
+      if (!hotelForm.declaration.dataAccuracy) errors.dataAccuracy = 'You must confirm data accuracy';
     }
 
     setFormErrors(errors);
@@ -1812,6 +3695,18 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       ...prev,
       policies: {
         ...prev.policies,
+        [field]: value
+      }
+    }));
+  };
+
+  // Handle declaration change
+  const handleDeclarationChange = (field, value) => {
+    setFormErrors(prev => ({ ...prev, [field]: '' }));
+    setHotelForm(prev => ({
+      ...prev,
+      declaration: {
+        ...prev.declaration,
         [field]: value
       }
     }));
@@ -2002,116 +3897,114 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     }));
   };
 
-  // Handle login
-  const handleLogin = (e) => {
-    e.preventDefault();
-    
-    // Check admin login
-    if (loginForm.role === 'admin' && 
-        loginForm.email === adminUser.email && 
-        loginForm.password === adminUser.password) {
+  // Enhanced Login Handler with Firebase
+  const handleLogin = async (loginData) => {
+    try {
+      // For admin, use existing system (no Firebase)
+      if (loginData.role === 'admin' && 
+          loginData.email === adminUser.email && 
+          loginData.password === adminUser.password) {
+        
+        setIsAuthenticated(true);
+        setUserRole('admin');
+        setCurrentUser(adminUser);
+        setShowLoginModal(false);
+        
+        localStorage.setItem('currentUser', JSON.stringify(adminUser));
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('userRole', 'admin');
+        
+        setLoginForm({
+          email: '',
+          password: '',
+          role: 'hotel'
+        });
+        return true;
+      }
+
+      // For hotel users, use Firebase
+      const userData = await handleFirebaseLogin(loginData.email, loginData.password, loginData.role);
+      
       setIsAuthenticated(true);
-      setUserRole('admin');
-      setCurrentUser(adminUser);
+      setUserRole(loginData.role);
+      setCurrentUser(userData);
       setShowLoginModal(false);
       
-      localStorage.setItem('currentUser', JSON.stringify(adminUser));
+      localStorage.setItem('currentUser', JSON.stringify(userData));
       localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('userRole', 'admin');
+      localStorage.setItem('userRole', loginData.role);
+      localStorage.setItem('firebaseUID', userData.uid);
       
       setLoginForm({
         email: '',
         password: '',
         role: 'hotel'
       });
-      return;
-    }
-
-    // Check hotel login
-    const hotelUser = hotelUsers.find(
-      u => u.email === loginForm.email && 
-           u.password === loginForm.password && 
-           loginForm.role === 'hotel'
-    );
-
-    if (hotelUser) {
-      setIsAuthenticated(true);
-      setUserRole('hotel');
-      setCurrentUser(hotelUser);
-      setShowLoginModal(false);
       
-      localStorage.setItem('currentUser', JSON.stringify(hotelUser));
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('userRole', 'hotel');
-      
-      setLoginForm({
-        email: '',
-        password: '',
-        role: 'hotel'
-      });
-    } else {
-      alert('Invalid credentials or role mismatch');
+      return true;
+    } catch (error) {
+      alert(error.message);
+      return false;
     }
   };
 
-  // Handle hotel registration
-  const handleHotelRegister = (e) => {
-    e.preventDefault();
-    
-    if (hotelRegisterForm.password !== hotelRegisterForm.confirmPassword) {
-      alert('Passwords do not match!');
-      return;
+  // Fixed Google Login Handler
+  const handleGoogleLogin = async () => {
+    try {
+      const userData = await handleGoogleSignIn();
+      if (!userData) return false;
+      
+      setIsAuthenticated(true);
+      setUserRole('hotel');
+      setCurrentUser(userData);
+      setShowLoginModal(false);
+      
+      localStorage.setItem('currentUser', JSON.stringify(userData));
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('userRole', 'hotel');
+      
+      return true;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
     }
-    
-    const existingHotel = hotelUsers.find(u => u.email === hotelRegisterForm.email);
-    if (existingHotel) {
-      alert('Hotel with this email already exists!');
-      return;
+  };
+
+  // Enhanced Hotel Registration Handler with Firebase
+  const handleHotelRegister = async (registrationData) => {
+    try {
+      const userData = await handleFirebaseRegister(registrationData);
+      
+      setIsAuthenticated(true);
+      setUserRole('hotel');
+      setCurrentUser(userData);
+      setShowRegisterModal(false);
+      
+      localStorage.setItem('currentUser', JSON.stringify(userData));
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('userRole', 'hotel');
+      localStorage.setItem('firebaseUID', userData.uid);
+      
+      setHotelRegisterForm({
+        hotelName: '',
+        ownerName: '',
+        email: '',
+        password: '',
+        confirmPassword: '',
+        phone: '',
+        address: '',
+        city: '',
+        pincode: '',
+        gstNumber: '',
+        panNumber: ''
+      });
+      
+      alert('Registration successful! Please check your email to verify your account before logging in.');
+      return true;
+    } catch (error) {
+      alert(error.message);
+      return false;
     }
-    
-    const newHotelUser = {
-      id: Date.now(),
-      hotelName: hotelRegisterForm.hotelName,
-      ownerName: hotelRegisterForm.ownerName,
-      email: hotelRegisterForm.email,
-      password: hotelRegisterForm.password,
-      role: 'hotel',
-      phone: hotelRegisterForm.phone,
-      address: hotelRegisterForm.address,
-      city: hotelRegisterForm.city,
-      pincode: hotelRegisterForm.pincode,
-      gstNumber: hotelRegisterForm.gstNumber,
-      panNumber: hotelRegisterForm.panNumber,
-      hotels: [],
-      registrationDate: new Date().toISOString()
-    };
-    
-    setHotelUsers(prev => [...prev, newHotelUser]);
-    
-    setIsAuthenticated(true);
-    setUserRole('hotel');
-    setCurrentUser(newHotelUser);
-    setShowRegisterModal(false);
-    
-    localStorage.setItem('currentUser', JSON.stringify(newHotelUser));
-    localStorage.setItem('isAuthenticated', 'true');
-    localStorage.setItem('userRole', 'hotel');
-    
-    setHotelRegisterForm({
-      hotelName: '',
-      ownerName: '',
-      email: '',
-      password: '',
-      confirmPassword: '',
-      phone: '',
-      address: '',
-      city: '',
-      pincode: '',
-      gstNumber: '',
-      panNumber: ''
-    });
-    
-    alert('Hotel registration successful! You can now add your hotel properties.');
   };
 
   // Submit new hotel property (for hotels) - Goes to pending approval
@@ -2180,11 +4073,11 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     if (currentUser) {
       const updatedHotelUsers = hotelUsers.map(user => 
         user.id === currentUser.id 
-          ? { ...user, hotels: [...user.hotels, newHotel.id] }
+          ? { ...user, hotels: [...(user.hotels || []), newHotel.id] }
           : user
       );
       setHotelUsers(updatedHotelUsers);
-      setCurrentUser({ ...currentUser, hotels: [...currentUser.hotels, newHotel.id] });
+      setCurrentUser({ ...currentUser, hotels: [...(currentUser.hotels || []), newHotel.id] });
     }
 
     setHotelForm({
@@ -2235,7 +4128,24 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     setFormErrors({});
 
     setShowHotelForm(false);
-    alert('Hotel property submitted successfully! It is now pending admin approval.');
+    
+    // Show success message with better styling
+    const successMessage = document.createElement('div');
+    successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 flex items-center space-x-2';
+    successMessage.innerHTML = `
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+      </svg>
+      <span>Data Submitted for approval</span>
+    `;
+    document.body.appendChild(successMessage);
+    
+    // Remove the message after 5 seconds
+    setTimeout(() => {
+      if (successMessage.parentNode) {
+        successMessage.parentNode.removeChild(successMessage);
+      }
+    }, 5000);
   };
 
   // Admin approve hotel
@@ -2282,7 +4192,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     setShowAvailabilityManager(true);
   };
 
-  // Send booking email - UPDATED with proper EmailJS integration
+  // Send booking email
   const sendBookingEmail = async (paymentMethod = 'Cash', paymentId = null) => {
     setLoading(true);
     
@@ -2358,7 +4268,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       }
       
       const options = {
-        key: "rzp_test_8O5v6zQ6T6W6X2", // Test key - replace with your live key in production
+        key: "rzp_test_8O5v6zQ6T6W6X2",
         amount: amount,
         currency: currency,
         name: "KashmirStays",
@@ -2556,6 +4466,15 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     </div>
   );
 
+  // Handle review submission
+  const handleReviewSubmit = (hotelId, updatedReviews) => {
+    setHotels(prev => prev.map(hotel => 
+      hotel.id === hotelId 
+        ? { ...hotel, reviews: updatedReviews.length, reviewData: updatedReviews }
+        : hotel
+    ));
+  };
+
   return (
     <motion.div 
       className="min-h-screen bg-gradient-to-b from-rose-50 to-white custom-scrollbar"
@@ -2590,6 +4509,11 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       {userRole === 'admin' ? 'Admin' : currentUser?.hotelName}
                     </span>
                     <span className="text-rose-600 text-sm capitalize">({userRole})</span>
+                    {currentUser?.emailVerified === false && userRole === 'hotel' && (
+                      <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full">
+                        Email Unverified
+                      </span>
+                    )}
                   </div>
                   
                   {userRole === 'hotel' && (
@@ -2907,340 +4831,24 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
           </motion.div>
         )}
 
-        {/* Hotel Registration Modal */}
-        <AnimatePresence>
-          {showRegisterModal && (
-            <motion.div 
-              className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <motion.div 
-                className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-auto shadow-2xl"
-                variants={modalVariants}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-              >
-                <div className="p-8">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Hotel Registration</h2>
-                    <button 
-                      onClick={() => setShowRegisterModal(false)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
-                    >
-                      <FiX size={24} />
-                    </button>
-                  </div>
+        {/* Enhanced Hotel Registration Modal */}
+        <EnhancedHotelRegistration
+          showRegisterModal={showRegisterModal}
+          setShowRegisterModal={setShowRegisterModal}
+          onHotelRegister={handleHotelRegister}
+          switchToLogin={switchToLogin}
+          loading={loading}
+        />
 
-                  <form onSubmit={handleHotelRegister} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Hotel Name *
-                        </label>
-                        <input
-                          type="text"
-                          name="hotelName"
-                          required
-                          className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                          value={hotelRegisterForm.hotelName}
-                          onChange={handleHotelRegisterChange}
-                          placeholder="Your hotel name"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Owner Name *
-                        </label>
-                        <input
-                          type="text"
-                          name="ownerName"
-                          required
-                          className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                          value={hotelRegisterForm.ownerName}
-                          onChange={handleHotelRegisterChange}
-                          placeholder="Owner's full name"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Email Address *
-                        </label>
-                        <input
-                          type="email"
-                          name="email"
-                          required
-                          className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                          value={hotelRegisterForm.email}
-                          onChange={handleHotelRegisterChange}
-                          placeholder="hotel@example.com"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Phone Number *
-                        </label>
-                        <input
-                          type="tel"
-                          name="phone"
-                          required
-                          className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                          value={hotelRegisterForm.phone}
-                          onChange={handleHotelRegisterChange}
-                          placeholder="+91 1234567890"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Password *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showPassword ? "text" : "password"}
-                            name="password"
-                            required
-                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none pr-10 transition-all"
-                            value={hotelRegisterForm.password}
-                            onChange={handleHotelRegisterChange}
-                            placeholder="Create a password"
-                          />
-                          <button
-                            type="button"
-                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                            onClick={() => setShowPassword(!showPassword)}
-                          >
-                            {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Confirm Password *
-                        </label>
-                        <input
-                          type="password"
-                          name="confirmPassword"
-                          required
-                          className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                          value={hotelRegisterForm.confirmPassword}
-                          onChange={handleHotelRegisterChange}
-                          placeholder="Confirm your password"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Address *
-                        </label>
-                        <input
-                          type="text"
-                          name="address"
-                          required
-                          className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                          value={hotelRegisterForm.address}
-                          onChange={handleHotelRegisterChange}
-                          placeholder="Full hotel address"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          City *
-                        </label>
-                        <input
-                          type="text"
-                          name="city"
-                          required
-                          className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                          value={hotelRegisterForm.city}
-                          onChange={handleHotelRegisterChange}
-                          placeholder="City"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Pincode *
-                        </label>
-                        <input
-                          type="text"
-                          name="pincode"
-                          required
-                          className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                          value={hotelRegisterForm.pincode}
-                          onChange={handleHotelRegisterChange}
-                          placeholder="Pincode"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          GST Number
-                        </label>
-                        <input
-                          type="text"
-                          name="gstNumber"
-                          className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                          value={hotelRegisterForm.gstNumber}
-                          onChange={handleHotelRegisterChange}
-                          placeholder="GSTIN number"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          PAN Number
-                        </label>
-                        <input
-                          type="text"
-                          name="panNumber"
-                          className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                          value={hotelRegisterForm.panNumber}
-                          onChange={handleHotelRegisterChange}
-                          placeholder="PAN number"
-                        />
-                      </div>
-                    </div>
-
-                    <motion.button
-                      type="submit"
-                      className="w-full bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 text-white py-3.5 rounded-lg font-medium transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center mt-6"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <FiBriefcase className="mr-2" size={18} />
-                      <span>Register Hotel Account</span>
-                    </motion.button>
-                    <div className="mt-4 text-center">
-                      <p className="text-gray-600">
-                        Already have an account?{' '}
-                        <button
-                          type="button"
-                          className="text-rose-600 hover:text-rose-700 font-medium transition-colors"
-                          onClick={switchToLogin}
-                        >
-                          Login here
-                        </button>
-                      </p>
-                    </div>
-                  </form>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Login Modal */}
-        <AnimatePresence>
-          {showLoginModal && (
-            <motion.div 
-              className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <motion.div 
-                className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden"
-                variants={modalVariants}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-              >
-                <div className="p-8">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Login to KashmirStays</h2>
-                    <button 
-                      onClick={() => setShowLoginModal(false)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
-                    >
-                      <FiX size={24} />
-                    </button>
-                  </div>
-
-                  <form onSubmit={handleLogin} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-                      <input
-                        type="email"
-                        name="email"
-                        required
-                        className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                        value={loginForm.email}
-                        onChange={handleLoginChange}
-                        placeholder="your@email.com"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? "text" : "password"}
-                          name="password"
-                          required
-                          className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none pr-10 transition-all"
-                          value={loginForm.password}
-                          onChange={handleLoginChange}
-                          placeholder="Enter your password"
-                        />
-                        <button
-                          type="button"
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Login As</label>
-                      <select
-                        name="role"
-                        className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                        value={loginForm.role}
-                        onChange={handleLoginChange}
-                      >
-                        <option value="hotel">Hotel</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    </div>
-
-                    <motion.button
-                      type="submit"
-                      className="w-full bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 text-white py-3.5 rounded-lg font-medium transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center mt-4"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <FiLogIn className="mr-2" size={18} />
-                      <span>Login to Account</span>
-                    </motion.button>
-
-                    <div className="mt-4 text-center">
-                      <p className="text-gray-600">
-                        Don't have an account?{' '}
-                        <button
-                          type="button"
-                          className="text-rose-600 hover:text-rose-700 font-medium transition-colors"
-                          onClick={switchToRegister}
-                        >
-                          Register your hotel
-                        </button>
-                      </p>
-                    </div>
-                  </form>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Enhanced Login Modal */}
+        <EnhancedLogin
+          showLoginModal={showLoginModal}
+          setShowLoginModal={setShowLoginModal}
+          onLogin={handleLogin}
+          onGoogleLogin={handleGoogleLogin}
+          switchToRegister={switchToRegister}
+          loading={loading}
+        />
 
         {/* Hotel Property Submission Form */}
         <AnimatePresence>
@@ -3341,6 +4949,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                               icon={FiAward}
                               error={formErrors.name}
                               description="The official name of your hotel property"
+                              validationRule={validationRules.hotelName}
                             />
 
                             <EnhancedInput
@@ -3398,6 +5007,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                 icon={FiDollarSign}
                                 error={formErrors.price}
                                 description="Starting price per night"
+                                validationRule={validationRules.price}
                               />
 
                               <EnhancedInput
@@ -3419,7 +5029,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                               onImageChange={handleImageUpload}
                               onImageRemove={handleImageRemove}
                               title="Hotel Main Image"
-                              description="Upload a high-quality image that represents your hotel (Min 150x150px, Max 100KB)"
+                              description="Upload a high-quality image in WEBP format only (Min 150x150px, Max 100KB)"
                               required
                               aspectRatio="16/9"
                             />
@@ -3585,6 +5195,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                     required
                                     icon={FiDollarSign}
                                     error={formErrors[`room_${roomIndex}_price`]}
+                                    validationRule={validationRules.price}
                                   />
 
                                   <EnhancedInput
@@ -3676,7 +5287,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                         onImageChange={(imageData) => handleRoomImageUpload(roomIndex, imageIndex, imageData)}
                                         onImageRemove={() => handleRoomImageRemove(roomIndex, imageIndex)}
                                         title={`Room Image ${imageIndex + 1}`}
-                                        description="Upload room interior photos (Min 150x150px, Max 100KB)"
+                                        description="Upload room interior photos in WEBP format only (Min 150x150px, Max 100KB)"
                                         aspectRatio="4/3"
                                       />
                                     ))}
@@ -3747,6 +5358,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                               icon={FiPhone}
                               error={formErrors.phone}
                               description="Primary contact number for guests"
+                              validationRule={validationRules.phone}
                             />
 
                             <EnhancedInput
@@ -3759,6 +5371,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                               icon={FiMail}
                               error={formErrors.email}
                               description="Official email address for inquiries"
+                              validationRule={validationRules.email}
                             />
                           </div>
 
@@ -4628,7 +6241,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                   {/* Tabs */}
                   <div className="border-b border-gray-200 mb-6">
                     <div className="flex space-x-8">
-                      {['details', 'rooms', 'policies', 'location', 'booking'].map(tab => (
+                      {['details', 'rooms', 'policies', 'location', 'booking', 'reviews'].map(tab => (
                         <button
                           key={tab}
                           onClick={() => {
@@ -4861,6 +6474,21 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       </motion.div>
                     )}
 
+                    {/* Reviews Tab */}
+                    {activeTab === 'reviews' && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-6"
+                      >
+                        <ReviewSystem
+                          hotel={selectedHotel}
+                          onReviewSubmit={(updatedReviews) => handleReviewSubmit(selectedHotel.id, updatedReviews)}
+                          currentUser={currentUser}
+                        />
+                      </motion.div>
+                    )}
+
                     {/* Enhanced Booking Tab */}
                     {activeTab === 'booking' && (
                       <motion.div
@@ -5051,6 +6679,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                     placeholder="your@email.com"
                                     required
                                     icon={FiMail}
+                                    validationRule={validationRules.email}
                                   />
 
                                   <EnhancedInput
@@ -5061,6 +6690,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                     placeholder="+91 1234567890"
                                     required
                                     icon={FiPhone}
+                                    validationRule={validationRules.phone}
                                   />
 
                                   <div className="md:col-span-2">
@@ -5235,6 +6865,6 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       </div>
     </motion.div>
   );
-};
+}; 
 
-export default Hotels;   
+export default Hotels;
