@@ -2,43 +2,29 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.js",
-      "use": "@vercel/node",
-      "config": { "includeFiles": ["api/**"] }
-    },
-    {
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
         "distDir": "dist",
-        "installCommand": "npm install --legacy-peer-deps && npm install @babel/plugin-transform-react-jsx @babel/core",
+        "installCommand": "npm install --legacy-peer-deps",
         "buildCommand": "npm run build"
       }
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/index.js"
-    },
-    {
       "src": "/assets/(.*)",
-      "dest": "/dist/assets/$1",
+      "dest": "/assets/$1",
       "headers": { "Cache-Control": "public, max-age=31536000, immutable" }
     },
     {
       "src": "/(.*\\.(ico|svg|png|jpg|jpeg|webp|gif|woff2|css|js))",
-      "dest": "/dist/$1",
+      "dest": "/$1",
       "headers": { "Cache-Control": "public, max-age=31536000, immutable" }
     },
     {
-      "src": "/",
-      "dest": "/dist/index.html", 
-      "headers": { "Cache-Control": "public, max-age=0, must-revalidate" }
-    },
-    {
       "src": "/(.*)",
-      "dest": "/dist/index.html",
+      "dest": "/index.html",
       "headers": { "Cache-Control": "public, max-age=0, must-revalidate" }
     }
   ]
