@@ -10,14 +10,24 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const unsub = checkAuthState(async (u) => {
-      setUser(u);
-      if (u) {
-        const doc = await getUserDoc(u.uid);
-        setProfile(doc);
-      } else {
-        setProfile(null);
+      try {
+        setUser(u);
+        if (u) {
+          try {
+            const doc = await getUserDoc(u.uid);
+            setProfile(doc || null);
+          } catch (err) {
+            // If Firestore rules block the read, avoid blocking the app
+            console.warn('Failed to read user profile from Firestore:', err?.message || err);
+            // Fallback minimal profile so the app can still render and show limited UI
+            setProfile(null);
+          }
+        } else {
+          setProfile(null);
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return () => unsub && unsub();
   }, []);

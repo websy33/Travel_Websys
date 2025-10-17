@@ -889,8 +889,6 @@ const EnhancedHotelRegistration = ({
     hotelName: '',
     ownerName: '',
     email: '',
-    password: '',
-    confirmPassword: '',
     phone: '',
     address: '',
     city: '',
@@ -958,17 +956,7 @@ const EnhancedHotelRegistration = ({
       if (emailError) errors.email = emailError;
     }
 
-    if (!hotelRegisterForm.password) {
-      errors.password = 'Password is required';
-    } else if (hotelRegisterForm.password.length < 6) {
-      errors.password = 'Password must be at least 6 characters';
-    }
-
-    if (!hotelRegisterForm.confirmPassword) {
-      errors.confirmPassword = 'Please confirm your password';
-    } else if (hotelRegisterForm.password !== hotelRegisterForm.confirmPassword) {
-      errors.confirmPassword = 'Passwords do not match';
-    }
+    // Password fields removed - using Google sign-in only for identity
 
     if (!hotelRegisterForm.phone.trim()) {
       errors.phone = 'Phone number is required';
@@ -1020,7 +1008,7 @@ const EnhancedHotelRegistration = ({
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!validateForm()) {
@@ -1028,11 +1016,16 @@ const EnhancedHotelRegistration = ({
       return;
     }
 
-    onHotelRegister({
+    // Use Google sign-in for hotel registration 
+    const success = await onHotelRegister({
       ...hotelRegisterForm,
       documents,
       registrationDate: new Date().toISOString()
     });
+    
+    if (success) {
+      setShowRegisterModal(false);
+    }
   };
 
   return (
@@ -3086,6 +3079,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       if (res.status === 'pending') {
         setPendingEmail(res.user?.email || '');
         setPendingModalOpen(true);
+        navigate('/pending-approval');
         return null;
       }
       if (res.status === 'approved') {
@@ -3136,37 +3130,34 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     }
   };
 
-  // Enhanced Firebase Registration Handler with Email Verification
+  // Registration now uses Google sign-in (no passwords). Creates user doc and stays pending until admin approves.
   const handleFirebaseRegister = async (registrationData) => {
     setLoading(true);
-    
     try {
-      // Create user in Firebase Authentication
-      const userCredential = await createUserWithEmailAndPassword(
-        auth, 
-        registrationData.email, 
-        registrationData.password
-      );
-      const user = userCredential.user;
+      let user = auth.currentUser;
+      if (!user) {
+        const res = await signInWithGoogleAndCheckApproval();
+        if (res.status === 'pending') {
+          setPendingEmail(res.user?.email || registrationData.email || '');
+          setPendingModalOpen(true);
+          navigate('/pending-approval');
+          return null;
+        }
+        if (res.status === 'approved') {
+          user = res.user;
+        }
+      }
 
-      // Update user profile with display name
-      await updateProfile(user, {
-        displayName: registrationData.ownerName
-      });
+      if (!user) {
+        throw new Error('Could not sign in with Google. Please try again.');
+      }
 
-      // Send email verification
-      await sendEmailVerification(user, {
-        url: window.location.origin + '/hotels',
-        handleCodeInApp: false
-      });
-
-      // Create hotel user in local storage system
+      // Create a lightweight local record to keep previous UI working
       const newHotelUser = {
         id: user.uid,
         hotelName: registrationData.hotelName,
         ownerName: registrationData.ownerName,
-        email: registrationData.email,
-        password: registrationData.password,
+        email: user.email || registrationData.email,
         role: 'hotel',
         phone: registrationData.phone,
         address: registrationData.address,
@@ -3182,21 +3173,18 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         emailVerified: user.emailVerified
       };
 
-      // Add to hotelUsers array
       setHotelUsers(prev => [...prev, newHotelUser]);
 
-      // Set as current user
       const userData = {
         uid: user.uid,
         id: user.uid,
         email: user.email,
-        name: registrationData.ownerName,
+        name: registrationData.ownerName || user.displayName || (user.email ? user.email.split('@')[0] : 'User'),
         role: 'hotel',
         hotelName: registrationData.hotelName,
         emailVerified: user.emailVerified,
         ...newHotelUser
       };
-
       return userData;
     } catch (error) {
       console.error('Firebase registration error:', error);
@@ -3859,59 +3847,88 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     }
   };
 
-  // Fixed Google Login Handler
+  // Fixed Google Login Handler with Approval Check
   const handleGoogleLogin = async () => {
     try {
-      const userData = await handleGoogleSignIn();
-      if (!userData) return false;
-      
-      setIsAuthenticated(true);
-      setUserRole('hotel');
-      setCurrentUser(userData);
-      setShowLoginModal(false);
-      
-      localStorage.setItem('currentUser', JSON.stringify(userData));
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('userRole', 'hotel');
-      
-      return true;
+      const res = await signInWithGoogleAndCheckApproval();
+      if (res.status === 'pending') {
+        setPendingEmail(res.user?.email || '');
+        setPendingModalOpen(true);
+        return false;
+      }
+      if (res.status === 'approved') {
+        const userData = {
+          uid: res.user.uid,
+          email: res.user.email,
+          name: res.user.displayName || res.user.email.split('@')[0],
+          role: res.role,
+          photoURL: res.user.photoURL,
+          emailVerified: res.user.emailVerified,
+        };
+        
+        setIsAuthenticated(true);
+        setUserRole(res.role);
+        setCurrentUser(userData);
+        setShowLoginModal(false);
+        
+        localStorage.setItem('currentUser', JSON.stringify(userData));
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('userRole', res.role);
+        
+        return true;
+      }
+      return false;
     } catch (error) {
       console.error('Login error:', error);
       return false;
     }
   };
 
-  // Enhanced Hotel Registration Handler with Firebase
+  // Enhanced Hotel Registration Handler with Google Only
   const handleHotelRegister = async (registrationData) => {
     try {
-      const userData = await handleFirebaseRegister(registrationData);
-      
-      setIsAuthenticated(true);
-      setUserRole('hotel');
-      setCurrentUser(userData);
-      setShowRegisterModal(false);
-      
-      localStorage.setItem('currentUser', JSON.stringify(userData));
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('userRole', 'hotel');
-      localStorage.setItem('firebaseUID', userData.uid);
-      
-      setHotelRegisterForm({
-        hotelName: '',
-        ownerName: '',
-        email: '',
-        password: '',
-        confirmPassword: '',
-        phone: '',
-        address: '',
-        city: '',
-        pincode: '',
-        gstNumber: '',
-        panNumber: ''
-      });
-      
-      alert('Registration successful! Please check your email to verify your account before logging in.');
-      return true;
+      const res = await signInWithGoogleAndCheckApproval();
+      if (res.status === 'pending') {
+        setPendingEmail(res.user?.email || registrationData.email || '');
+        setPendingModalOpen(true);
+        setShowRegisterModal(false);
+        return false;
+      }
+      if (res.status === 'approved') {
+        const userData = {
+          uid: res.user.uid,
+          email: res.user.email,
+          name: res.user.displayName || registrationData.ownerName || res.user.email.split('@')[0],
+          role: res.role,
+          hotelName: registrationData.hotelName,
+          photoURL: res.user.photoURL,
+          emailVerified: res.user.emailVerified,
+        };
+        
+        setIsAuthenticated(true);
+        setUserRole(res.role);
+        setCurrentUser(userData);
+        setShowRegisterModal(false);
+        
+        localStorage.setItem('userRole', res.role);
+        localStorage.setItem('firebaseUID', userData.uid);
+        
+        setHotelRegisterForm({
+          hotelName: '',
+          ownerName: '',
+          email: '',
+          phone: '',
+          address: '',
+          city: '',
+          pincode: '',
+          gstNumber: '',
+          panNumber: ''
+        });
+        
+        alert('Registration successful! You are now signed in.');
+        return true;
+      }
+      return false;
     } catch (error) {
       alert(error.message);
       return false;

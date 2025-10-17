@@ -48,6 +48,7 @@ import LoginModal from './Components/LoginModal.jsx';
 import AdminApprovalDashboard from './Components/AdminApprovalDashboard.jsx';
 import ProtectedRoute from './auth/ProtectedRoute.jsx';
 import { AuthProvider } from './auth/AuthContext.jsx';
+import PendingApproval from './Pages/PendingApproval.jsx';
 import Gallery from './Footer/Gallery.jsx';
 import Womens from './Footer/Womens.jsx';
 import Section from './Footer/Section.jsx';
@@ -157,6 +158,8 @@ function App() {
             <Route path="/GangtokDarjeeling" element={<GangtokDarjeeling />} />
             <Route path="/Testimonials" element={<Testimonials />} />
             <Route path="/LoginModal" element={<LoginModal />} />
+            {/* Pending approval route for unapproved users */}
+            <Route path="/pending-approval" element={<PendingApproval />} />
             <Route path="/admin/approvals" element={
               <ProtectedRoute requiredRole="admin">
                 <AdminApprovalDashboard />

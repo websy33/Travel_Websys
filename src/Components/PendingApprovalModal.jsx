@@ -43,12 +43,13 @@ export default function PendingApprovalModal({ open, email, onClose }) {
               <div className="flex items-start gap-3 text-gray-700">
                 <FiClock className="mt-0.5 text-rose-600" />
                 <p className="text-sm leading-relaxed">
-                  An administrator needs to approve your access before you can continue. You’ll receive an update soon.
+                  An administrator needs to approve your access before you can continue. This is to keep the platform secure and curated.
                 </p>
               </div>
               <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                <li>Keep this page open or come back later</li>
+                <li>Approvals typically complete within a few hours</li>
                 <li>If urgent, contact support for faster approval</li>
+                <li>You can refresh and try again after approval</li>
               </ul>
               <div className="pt-2">
                 <button
