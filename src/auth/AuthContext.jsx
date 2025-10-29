@@ -9,6 +9,13 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Check if Firebase auth is available
+    if (!auth) {
+      console.warn('Firebase not initialized, skipping auth check');
+      setLoading(false);
+      return;
+    }
+
     const unsub = checkAuthState(async (u) => {
       setUser(u);
       if (u) {

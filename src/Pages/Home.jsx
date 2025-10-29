@@ -121,11 +121,11 @@ function SearchForm({ onSearch, primaryColor = 'bg-pink-600', primaryHoverColor 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5 }}
-        className="text-xl md:text-2xl font-bold text-gray-800 mb-4 md:mb-6"
+        className="text-lg md:text-2xl font-bold text-gray-800 mb-4 md:mb-6 text-center"
       >
         Where would you like to go?
       </motion.h3>
-      <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <form onSubmit={handleSearch} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           {
             icon: FaMapMarkerAlt,
@@ -198,7 +198,7 @@ function SearchForm({ onSearch, primaryColor = 'bg-pink-600', primaryHoverColor 
           }}
           whileTap={{ scale: 0.95 }}
           type="submit"
-          className="bg-pink-600 hover:bg-pink-700 text-white px-4 md:px-6 py-3 rounded-lg font-bold transition-all duration-200 flex items-center justify-center text-sm md:text-base"
+          className="bg-pink-600 hover:bg-pink-700 text-white px-4 md:px-6 py-3 rounded-lg font-bold transition-all duration-200 flex items-center justify-center text-sm md:text-base col-span-1 sm:col-span-2 md:col-span-1"
         >
           Search Packages
           <motion.span
@@ -2850,7 +2850,7 @@ destinationId: 'golden-triangle'
                   repeatType: "reverse"
                 }}
               />
-              <div className={`absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent flex items-end pb-20 md:pb-32 px-4 md:px-8`}>
+              <div className={`absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent flex items-end pb-32 md:pb-40 px-4 md:px-8`}>
                 <motion.div 
                   initial={{ opacity: 0, y: 50 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -2898,8 +2898,14 @@ destinationId: 'golden-triangle'
                       boxShadow: "0 10px 25px -5px rgba(255, 255, 255, 0.3)"
                     }}
                     whileTap={{ scale: 0.95 }}
-                    className={`bg-white hover:bg-gray-100 ${primaryTextColor} px-6 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-lg transition-colors duration-200 inline-flex items-center shadow-lg hover:shadow-xl`}
-                    onClick={() => navigate(`/${dest.title.toLowerCase()}`)}
+                    className={`bg-white hover:bg-gray-100 ${primaryTextColor} px-6 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-lg transition-colors duration-200 inline-flex items-center shadow-lg hover:shadow-xl mb-20 md:mb-0`}
+                    onClick={() => {
+                      // Scroll to holiday packages section
+                      const packagesSection = document.getElementById('holiday-packages');
+                      if (packagesSection) {
+                        packagesSection.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }}
                   >
                     Explore 
                     <motion.span
@@ -2931,7 +2937,7 @@ destinationId: 'golden-triangle'
             <FaChevronRight className="h-4 w-4 md:h-5 md:w-5" />
           </motion.button>
           
-          <div className="absolute bottom-20 md:bottom-32 left-1/2 transform -translate-x-1/2 flex space-x-2 md:space-x-3 z-10">
+          <div className="absolute bottom-32 md:bottom-40 left-1/2 transform -translate-x-1/2 flex space-x-2 md:space-x-3 z-10">
             {featuredDestinations.map((_, index) => (
               <motion.button
                 key={index}
@@ -2944,9 +2950,11 @@ destinationId: 'golden-triangle'
           </div>
         </div>
 
-        {/* Search Form - Moved Below */}
+        {/* Search Form - Moved Below with better mobile spacing */}
         <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 z-10 w-full max-w-6xl px-4">
-          <SearchForm onSearch={handleSearch} />
+          <div className="mb-4 md:mb-0">
+            <SearchForm onSearch={handleSearch} />
+          </div>
         </div>
       </section>
 
@@ -2962,8 +2970,13 @@ destinationId: 'golden-triangle'
           </div>
         </section>
       )}
-      <br /><br /><br /><br /><br /><br />
+      
+      {/* Spacing for mobile view between slide and search sections */}
+      <div className="h-16 md:h-20 lg:h-24"></div>
 
+      {/* Additional spacing for mobile */}
+      <div className="h-8 md:h-12"></div>
+      
       {/* Trending Cities Section with Links */}
       <section className="py-16 md:py-24 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -3190,7 +3203,7 @@ destinationId: 'golden-triangle'
       </section>
 
       {/* Holiday Packages Section */}
-      <section className="py-24 bg-white">
+      <section id="holiday-packages" className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <span className={`${primaryTextColor} font-semibold`}>TRAVEL PACKAGES</span>

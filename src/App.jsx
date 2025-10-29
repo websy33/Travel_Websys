@@ -5,7 +5,6 @@ import React, { useEffect, useState } from 'react';
 import Home from './Pages/Home';
 import Flights from './Pages/Flights';
 import Hotels from './Pages/Hotels';
-import Holidays from './Pages/Holidays';
 import Trains from './Pages/Trains';
 import Cabs from './Pages/Cabs';
 import Blog from './Pages/Blog.jsx'
@@ -81,6 +80,9 @@ import Azerbaijan from './Footer/Azarbaijan.jsx';
 import Nepal from './Footer/Nepal.jsx';
 import  Cancellation  from './Footer/Cancellation.jsx';
 import Googleplacesapi from './Components/googleplacesapi.jsx';
+import HotelRateExample from './examples/HotelRateExample.jsx';
+import RateTestComponent from './Components/Hotels/auth/RateTestComponent.jsx';
+import HotelDataViewer from './Components/Hotels/display/HotelDataViewer.jsx';
 
 // Removed Mapbox-based HomeWithMap. Use original Home directly.
 
@@ -120,7 +122,7 @@ function App() {
             <Route path="/hotels" element={<Hotels />} />
             <Route path="/hotels-admin" element={<Hotels showAdminLogin={true} />} />
             <Route path="/hotels-register" element={<Hotels showRegister={true} />} />
-            <Route path="/holidays" element={<Holidays />} />
+            <Route path="/holidays" element={<HolidayPackages />} />
             <Route path="/Trains" element={<Trains />} />
             <Route path="/Cabs" element={<Cabs />} />
             <Route path="/Blog" element={<Blog />} />
@@ -194,6 +196,9 @@ function App() {
             <Route path="/Nepal" element={<Nepal />} />
             <Route path="/Cancellation" element={<Cancellation />} />
             <Route path="/googleplacesapi" element={<Googleplacesapi />} />
+            <Route path="/hotel-rates-demo" element={<HotelRateExample />} />
+            <Route path="/rate-test" element={<RateTestComponent />} />
+            <Route path="/hotel-data" element={<HotelDataViewer />} />
           </Routes>
         </main>
 

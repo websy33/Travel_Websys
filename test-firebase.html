@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Configuration Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .info {
+            color: #17a2b8;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        #result {
+            margin-top: 20px;
+            white-space: pre-wrap;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .config-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 4px;
+        }
+        .config-label {
+            font-weight: bold;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔥 Firebase Configuration Test</h1>
+        <p class="subtitle">Testing Firebase initialization and authentication</p>
+        
+        <div class="test-section">
+            <h3>📋 Configuration Status</h3>
+            <div id="configStatus">Checking configuration...</div>
+        </div>
+
+        <div class="test-section">
+            <h3>🧪 Test Actions</h3>
+            <button onclick="testFirebaseInit()">Test Firebase Init</button>
+            <button onclick="testGoogleAuth()">Test Google Auth Popup</button>
+            <button onclick="checkAuthState()">Check Auth State</button>
+            <button onclick="clearResults()">Clear Results</button>
+        </div>
+
+        <div id="result"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBptxqQHZpstJwUqq1TD2-sbS_iUCm9spk",
+            authDomain: "login-d3f1c.firebaseapp.com",
+            projectId: "login-d3f1c",
+            storageBucket: "login-d3f1c.firebasestorage.app",
+            messagingSenderId: "132957716999",
+            appId: "1:132957716999:web:ddaac6be1355184a7560a2"
+        };
+
+        let app, auth, provider;
+
+        function log(message, type = 'info') {
+            const resultDiv = document.getElementById('result');
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#17a2b8';
+            resultDiv.innerHTML += `<div style="color: ${color}; margin: 5px 0;">[${timestamp}] ${message}</div>`;
+            resultDiv.scrollTop = resultDiv.scrollHeight;
+        }
+
+        function displayConfig() {
+            const configDiv = document.getElementById('configStatus');
+            let html = '<div class="config-item">';
+            html += '<span class="config-label">API Key:</span> ' + (firebaseConfig.apiKey ? '✅ Present' : '❌ Missing') + '</div>';
+            html += '<div class="config-item"><span class="config-label">Auth Domain:</span> ' + firebaseConfig.authDomain + '</div>';
+            html += '<div class="config-item"><span class="config-label">Project ID:</span> ' + firebaseConfig.projectId + '</div>';
+            html += '<div class="config-item"><span class="config-label">Storage Bucket:</span> ' + firebaseConfig.storageBucket + '</div>';
+            html += '<div class="config-item"><span class="config-label">Messaging Sender ID:</span> ' + firebaseConfig.messagingSenderId + '</div>';
+            html += '<div class="config-item"><span class="config-label">App ID:</span> ' + (firebaseConfig.appId ? '✅ Present' : '❌ Missing') + '</div>';
+            configDiv.innerHTML = html;
+        }
+
+        window.testFirebaseInit = async function() {
+            try {
+                log('🚀 Initializing Firebase...', 'info');
+                app = initializeApp(firebaseConfig);
+                log('✅ Firebase app initialized successfully!', 'success');
+                
+                auth = getAuth(app);
+                log('✅ Firebase Auth initialized successfully!', 'success');
+                
+                provider = new GoogleAuthProvider();
+                provider.addScope('email');
+                provider.addScope('profile');
+                log('✅ Google Auth Provider configured!', 'success');
+                
+                log('🎉 All Firebase services initialized successfully!', 'success');
+            } catch (error) {
+                log('❌ Firebase initialization error: ' + error.message, 'error');
+                console.error('Full error:', error);
+            }
+        };
+
+        window.testGoogleAuth = async function() {
+            if (!auth || !provider) {
+                log('⚠️ Please initialize Firebase first!', 'error');
+                return;
+            }
+
+            try {
+                log('🔐 Opening Google sign-in popup...', 'info');
+                const result = await signInWithPopup(auth, provider);
+                log('✅ Sign-in successful!', 'success');
+                log('👤 User: ' + result.user.email, 'success');
+                log('📧 Display Name: ' + result.user.displayName, 'success');
+            } catch (error) {
+                log('❌ Google sign-in error: ' + error.message, 'error');
+                log('Error code: ' + error.code, 'error');
+                console.error('Full error:', error);
+            }
+        };
+
+        window.checkAuthState = function() {
+            if (!auth) {
+                log('⚠️ Please initialize Firebase first!', 'error');
+                return;
+            }
+
+            log('🔍 Checking authentication state...', 'info');
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    log('✅ User is signed in:', 'success');
+                    log('   Email: ' + user.email, 'success');
+                    log('   UID: ' + user.uid, 'success');
+                    log('   Display Name: ' + (user.displayName || 'Not set'), 'success');
+                } else {
+                    log('ℹ️ No user is currently signed in', 'info');
+                }
+            });
+        };
+
+        window.clearResults = function() {
+            document.getElementById('result').innerHTML = '';
+        };
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            displayConfig();
+            log('📱 Test page loaded. Click "Test Firebase Init" to begin.', 'info');
+        });
+    </script>
+</body>
+</html>

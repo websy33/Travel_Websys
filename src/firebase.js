@@ -17,6 +17,13 @@ import {
   serverTimestamp,
   collection,
   onSnapshot,
+  addDoc,
+  deleteDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit
 } from 'firebase/firestore';
 
 // Firebase configuration from .env file
@@ -29,18 +36,38 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-export const db = getFirestore(app);
+// Check if Firebase credentials are configured
+const isFirebaseConfigured = firebaseConfig.apiKey && firebaseConfig.projectId;
+
+// Initialize Firebase only if configured
+let app = null;
+let auth = null;
+let googleProvider = null;
+let db = null;
+
+if (isFirebaseConfigured) {
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    googleProvider = new GoogleAuthProvider();
+    db = getFirestore(app);
+  } catch (error) {
+    console.warn('Firebase initialization failed:', error.message);
+  }
+} else {
+  console.warn('Firebase credentials not configured. Authentication features will be disabled.');
+}
+
+export { auth, googleProvider, db };
 
 // Configure Google Auth Provider
-googleProvider.addScope('email');
-googleProvider.addScope('profile');
-googleProvider.setCustomParameters({
-  prompt: 'select_account'
-});
+if (googleProvider) {
+  googleProvider.addScope('email');
+  googleProvider.addScope('profile');
+  googleProvider.setCustomParameters({
+    prompt: 'select_account'
+  });
+}
 
 // Auth state checker
 export const checkAuthState = (callback) => {

@@ -1,0 +1,106 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isHotelOwner() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'hotel';
+    }
+
+    // Users collection - for authentication profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Hotel Registrations - Pending approval
+    match /hotelRegistrations/{registrationId} {
+      // Anyone can create a registration (for signup)
+      allow create: if isAuthenticated();
+      
+      // Owners can read their own registrations
+      allow read: if isAuthenticated() && 
+                    (resource.data.uid == request.auth.uid || isAdmin());
+      
+      // Only admins can update/approve registrations
+      allow update, delete: if isAdmin();
+    }
+
+    // Pending Hotels - Awaiting admin approval
+    match /pendingHotels/{hotelId} {
+      // Hotel owners can create pending hotels
+      allow create: if isAuthenticated();
+      
+      // Owners can read their own pending hotels, admins can read all
+      allow read: if isAuthenticated();
+      
+      // Only admins can approve (move to hotels collection)
+      allow update, delete: if isAdmin();
+    }
+
+    // Approved Hotels - Public hotel listings
+    match /hotels/{hotelId} {
+      // Anyone can read approved hotels (even non-authenticated for public viewing)
+      allow read: if true;
+      
+      // Only admins can create approved hotels
+      allow create: if isAdmin();
+      
+      // Hotel owners can update their own hotels, admins can update any
+      allow update: if isAuthenticated() && 
+                      (resource.data.ownerId == request.auth.uid || isAdmin());
+      
+      // Only admins can delete hotels
+      allow delete: if isAdmin();
+    }
+
+    // Hotel Users - Hotel owner profiles
+    match /hotelUsers/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Bookings collection (if you need it)
+    match /bookings/{bookingId} {
+      allow read: if isAuthenticated() && 
+                    (resource.data.userId == request.auth.uid || 
+                     resource.data.hotelOwnerId == request.auth.uid || 
+                     isAdmin());
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                      (resource.data.userId == request.auth.uid || 
+                       resource.data.hotelOwnerId == request.auth.uid || 
+                       isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Reviews collection (if you need it)
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && 
+                              (resource.data.userId == request.auth.uid || isAdmin());
+    }
+  }
+}

@@ -1,4 +1,163 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+
+// Memoized image component for lazy loading
+const LazyImage = memo(({ src, alt, className, onClick }) => {
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  return (
+    <div className={`relative overflow-hidden ${className}`}>
+      {!imageLoaded && !imageError && (
+        <div className="absolute inset-0 bg-gray-200 animate-pulse flex items-center justify-center">
+          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className={`w-full h-full object-cover transition-opacity duration-300 ${
+          imageLoaded ? 'opacity-100' : 'opacity-0'
+        } ${className}`}
+        onLoad={() => setImageLoaded(true)}
+        onError={() => setImageError(true)}
+        onClick={onClick}
+        loading="lazy"
+      />
+    </div>
+  );
+});
+
+// Memoized destination card component
+const DestinationCard = memo(({ destination, onExplore }) => (
+  <div className="bg-gray-50 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
+    <div className="overflow-hidden">
+      <LazyImage 
+        src={destination.image} 
+        alt={destination.name}
+        className="h-48 w-full transition-transform duration-700 hover:scale-110"
+      />
+    </div>
+    <div className="p-4">
+      <h3 className="text-xl font-bold text-gray-800 mb-2">{destination.name}</h3>
+      <p className="text-gray-600 mb-3">{destination.description}</p>
+      <div className="mb-3">
+        <span className="font-semibold text-pink-600">Best Time to Visit:</span>
+        <span className="text-gray-700 ml-2">{destination.bestTime}</span>
+      </div>
+      <div>
+        <span className="font-semibold text-pink-600">Main Attractions:</span>
+        <ul className="text-gray-700 mt-1 space-y-1">
+          {destination.attractions.map((attr, index) => (
+            <li key={index} className="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              {attr}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  </div>
+));
+
+// Memoized post card component
+const PostCard = memo(({ 
+  post, 
+  expandedPosts, 
+  likedPosts, 
+  onToggleReadMore, 
+  onToggleLike, 
+  onShare 
+}) => {
+  const isExpanded = expandedPosts[post.id];
+  const isLiked = likedPosts[post.id];
+  const likeCount = post.likes + (isLiked ? 1 : 0);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 group">
+      <div className="relative overflow-hidden">
+        <LazyImage 
+          src={post.image} 
+          alt={post.title}
+          className="h-48 w-full transition-transform duration-700 group-hover:scale-110"
+        />
+        <div className="absolute top-4 right-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white text-xs px-3 py-1 rounded-full shadow-md">
+          {post.category}
+        </div>
+        <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-black/60 to-transparent"></div>
+      </div>
+      <div className="p-6">
+        <div className="flex items-center text-xs text-gray-500 mb-3">
+          <span>{post.date}</span>
+          <span className="mx-2">•</span>
+          <span>{post.readTime}</span>
+        </div>
+        <h3 className="text-xl font-semibold text-gray-900 mb-3 hover:text-pink-600 cursor-pointer transition-colors">
+          {post.title}
+        </h3>
+        <p className="text-gray-600 text-sm mb-4 leading-relaxed">{post.excerpt}</p>
+        {isExpanded && (
+          <p className="text-gray-700 text-sm mb-4 leading-relaxed animate-fade-in">
+            {post.fullContent}
+          </p>
+        )}
+        
+        <div className="flex items-center justify-between mt-4">
+          <div className="flex items-center">
+            <div className="bg-gradient-to-r from-pink-100 to-purple-100 rounded-full h-8 w-8 flex items-center justify-center mr-2 shadow-inner">
+              <span className="text-pink-700 text-xs font-bold">
+                {post.author?.charAt(0) || 'U'}
+              </span>
+            </div>
+            <span className="text-xs text-gray-600">{post.author || 'Unknown'}</span>
+          </div>
+          
+          <div className="flex items-center space-x-3">
+            <button 
+              onClick={() => onToggleLike(post.id)}
+              className="flex items-center text-gray-500 hover:text-pink-500 transition-colors group"
+              title="Like this post"
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className={`h-5 w-5 ${isLiked ? 'text-pink-500 fill-current' : 'group-hover:scale-110 transition-transform'}`} 
+                fill={isLiked ? "currentColor" : "none"} 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+              <span className="text-xs ml-1">{likeCount}</span>
+            </button>
+            
+            <button 
+              onClick={() => onShare(post)}
+              className="text-gray-500 hover:text-blue-500 transition-colors"
+              title="Share this post"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <button 
+          onClick={() => onToggleReadMore(post.id)}
+          className="w-full mt-4 text-center text-pink-500 hover:text-pink-700 text-sm font-medium transition-colors flex items-center justify-center group"
+        >
+          {isExpanded ? 'Read Less' : 'Read More'}
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 transform group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+});
 
 const Blog = () => {
   const [email, setEmail] = useState('');
@@ -38,111 +197,8 @@ const Blog = () => {
     }
   }, [currentSlide]);
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (email) {
-      setSubscribed(true);
-      setEmail('');
-      
-      // Reset subscription status after 5 seconds
-      setTimeout(() => {
-        setSubscribed(false);
-      }, 5000);
-    }
-  };
-
-  const handleExploreDestinations = () => {
-    setSelectedDestination('overview');
-  };
-
-  const handleCloseModal = () => {
-    setSelectedDestination(null);
-  };
-
-  const toggleReadMore = (postId) => {
-    setExpandedPosts(prev => ({
-      ...prev,
-      [postId]: !prev[postId]
-    }));
-  };
-
-  const toggleSearch = () => {
-    setShowSearch(!showSearch);
-    if (!showSearch) {
-      setTimeout(() => {
-        document.getElementById('search-input')?.focus();
-      }, 100);
-    } else {
-      setSearchQuery('');
-    }
-  };
-
-  const handleViewGallery = () => {
-    setShowGallery(true);
-    document.body.style.overflow = 'hidden'; // Prevent scrolling when gallery is open
-  };
-
-  const handleCloseGallery = () => {
-    setShowGallery(false);
-    setSelectedImage(null);
-    document.body.style.overflow = 'auto'; // Re-enable scrolling
-  };
-
-  const handleImageClick = (image) => {
-    setSelectedImage(image);
-  };
-
-  const handleNextImage = () => {
-    const currentIndex = galleryImages.findIndex(img => img.id === selectedImage.id);
-    const nextIndex = (currentIndex + 1) % galleryImages.length;
-    setSelectedImage(galleryImages[nextIndex]);
-  };
-
-  const handlePrevImage = () => {
-    const currentIndex = galleryImages.findIndex(img => img.id === selectedImage.id);
-    const prevIndex = (currentIndex - 1 + galleryImages.length) % galleryImages.length;
-    setSelectedImage(galleryImages[prevIndex]);
-  };
-
-  const nextSlide = () => {
-    setCurrentSlide((prevSlide) => (prevSlide + 1) % travelGuides.length);
-  };
-
-  const prevSlide = () => {
-    setCurrentSlide((prevSlide) => (prevSlide - 1 + travelGuides.length) % travelGuides.length);
-  };
-
-  const goToSlide = (index) => {
-    setCurrentSlide(index);
-  };
-
-  const toggleLike = (postId) => {
-    setLikedPosts(prev => ({
-      ...prev,
-      [postId]: !prev[postId]
-    }));
-  };
-
-  const handleShare = (post) => {
-    setCurrentPost(post);
-    setShowShareModal(true);
-  };
-
-  const handleCloseShareModal = () => {
-    setShowShareModal(false);
-    setCurrentPost(null);
-  };
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(window.location.href);
-    alert('Link copied to clipboard!');
-  };
-
-  const featuredPost = {
+  // Memoized data
+  const featuredPost = useMemo(() => ({
     id: 1,
     title: 'Exploring the Beauty of Dal Lake',
     excerpt: 'Experience the magical shikara rides, floating gardens, and majestic mountain backdrop of one of India\'s most iconic destinations.',
@@ -153,9 +209,9 @@ const Blog = () => {
     author: 'Amit Kumar',
     readTime: '5 min read',
     likes: 243
-  };
+  }), []);
 
-  const posts = [
+  const posts = useMemo(() => [
     {
       id: 2,
       title: 'Skiing in the Himalayas',
@@ -219,15 +275,16 @@ const Blog = () => {
       title: 'Tourist Scams Around the World: How to Stay Safe',
       excerpt: '🌍✈️ Tourist Scams Around the World: Top Travel Scams You Must Know & How to Stay Safe in 2025 🧳🚨',
       fullContent: 'Traveling is one of the most rewarding experiences in life — exploring famous tourist destinations, discovering new cultures, and creating unforgettable memories. 🌐✨ But amidst the beauty and adventure, tourist scams around the world have become a growing problem that every traveler needs to be aware of. Scammers are becoming smarter, using modern tricks, fake offers, and emotional manipulation to trap tourists, especially in popular travel hotspots. 😬 From overpriced taxi rides at airports and fake tour guides offering "exclusive" deals, to pickpocketing scams in crowded tourist attractions and ATM fraud near famous landmarks, these scams can happen anywhere — whether you\'re visiting Europe, Asia, America, or tropical island destinations. 🏝️🚖 Criminals often target tourists because they\'re unfamiliar with the surroundings, distracted by sightseeing, or carrying extra cash and valuables. In 2025, travel scams have evolved, making it even more important to stay updated. Some scammers use social media tricks, QR code scams, or pose as helpful locals offering assistance to gain your trust. Others run fake booking websites, sell counterfeit tickets, or offer too-good-to-be-true vacation packages that disappear once you pay. These scams can ruin your trip, drain your bank account, and even put your safety at risk. 🚨💸 That\'s why learning about the top travel scams, latest tourist traps, and real-life scam stories is essential before you pack your bags. In this blog, we\'ll reveal the most common scams tourists face globally, highlight country-specific scams in popular destinations like Paris, Bangkok, Dubai, and Bali, and share expert travel safety tips to keep you protected. 📝🌏 Whether you\'re a solo traveler, couple on honeymoon, family on vacation, or digital nomad exploring new cities, staying informed is your first line of defense. By knowing what to look out for, you can avoid travel scams, save money, and enjoy a stress-free adventure. 🚀✨',
-    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSPoAbOVja6D0VU1fcKLdrvWPXu3cDYxFL94Q&s',
-    category: 'Travel Safety',
-    date: 'February 15, 2024',
-    author: 'Security Expert Team',
-    readTime: '10 min read',
-    likes: 189
-  }
-];
-  const destinations = [
+      image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSPoAbOVja6D0VU1fcKLdrvWPXu3cDYxFL94Q&s',
+      category: 'Travel Safety',
+      date: 'February 15, 2024',
+      author: 'Security Expert Team',
+      readTime: '10 min read',
+      likes: 189
+    }
+  ], []);
+
+  const destinations = useMemo(() => [
     {
       id: 1,
       name: "Srinagar",
@@ -260,9 +317,9 @@ const Blog = () => {
       bestTime: "May to September",
       attractions: ["Thajiwas Glacier", "Zoji La Pass", "Nilagrad River", "Baltal Valley"]
     }
-  ];
+  ], []);
 
-  const galleryImages = [
+  const galleryImages = useMemo(() => [
     {
       id: 1,
       src: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS69mR9KcID1WodXoXJKFz4em28P74unLU63A&s",
@@ -317,9 +374,9 @@ const Blog = () => {
       title: "Local Cuisine",
       description: "Traditional feast with aromatic spices"
     }
-  ];
+  ], []);
 
-  const travelGuides = [
+  const travelGuides = useMemo(() => [
     {
       id: 1,
       month: "January",
@@ -416,17 +473,135 @@ const Blog = () => {
       image: "https://images.unsplash.com/photo-1418065460487-3e41a6c84dc5?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2072&q=80",
       description: "Festive celebrations and winter wonderlands"
     }
-  ];
+  ], []);
 
-  const categories = ['All', 'Adventure', 'Nature', 'Food & Culture', 'Unique Stays', 'Travel Tips', 'Travel Safety'];
-  
-  // Filter posts based on active tab and search query
-  const filteredPosts = (activeTab === 'all' ? posts : posts.filter(post => post.category === activeTab))
-    .filter(post => 
+  const categories = useMemo(() => ['All', 'Adventure', 'Nature', 'Food & Culture', 'Unique Stays', 'Travel Tips', 'Travel Safety'], []);
+
+  // Memoized filtered posts
+  const filteredPosts = useMemo(() => {
+    const tabFiltered = activeTab === 'all' ? posts : posts.filter(post => post.category === activeTab);
+    return tabFiltered.filter(post => 
       post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       post.excerpt.toLowerCase().includes(searchQuery.toLowerCase()) ||
       post.category.toLowerCase().includes(searchQuery.toLowerCase())
     );
+  }, [activeTab, searchQuery, posts]);
+
+  // Optimized event handlers with useCallback
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleSubmit = useCallback((e) => {
+    e.preventDefault();
+    if (email) {
+      setSubscribed(true);
+      setEmail('');
+      
+      // Reset subscription status after 5 seconds
+      setTimeout(() => {
+        setSubscribed(false);
+      }, 5000);
+    }
+  }, [email]);
+
+  const handleExploreDestinations = useCallback(() => {
+    setSelectedDestination('overview');
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setSelectedDestination(null);
+  }, []);
+
+  const toggleReadMore = useCallback((postId) => {
+    setExpandedPosts(prev => ({
+      ...prev,
+      [postId]: !prev[postId]
+    }));
+  }, []);
+
+  const toggleSearch = useCallback(() => {
+    setShowSearch(!showSearch);
+    if (!showSearch) {
+      setTimeout(() => {
+        document.getElementById('search-input')?.focus();
+      }, 100);
+    } else {
+      setSearchQuery('');
+    }
+  }, [showSearch]);
+
+  const handleViewGallery = useCallback(() => {
+    setShowGallery(true);
+    document.body.style.overflow = 'hidden';
+  }, []);
+
+  const handleCloseGallery = useCallback(() => {
+    setShowGallery(false);
+    setSelectedImage(null);
+    document.body.style.overflow = 'auto';
+  }, []);
+
+  const handleImageClick = useCallback((image) => {
+    setSelectedImage(image);
+  }, []);
+
+  const handleNextImage = useCallback(() => {
+    if (selectedImage) {
+      const currentIndex = galleryImages.findIndex(img => img.id === selectedImage.id);
+      const nextIndex = (currentIndex + 1) % galleryImages.length;
+      setSelectedImage(galleryImages[nextIndex]);
+    }
+  }, [selectedImage, galleryImages]);
+
+  const handlePrevImage = useCallback(() => {
+    if (selectedImage) {
+      const currentIndex = galleryImages.findIndex(img => img.id === selectedImage.id);
+      const prevIndex = (currentIndex - 1 + galleryImages.length) % galleryImages.length;
+      setSelectedImage(galleryImages[prevIndex]);
+    }
+  }, [selectedImage, galleryImages]);
+
+  const nextSlide = useCallback(() => {
+    setCurrentSlide((prevSlide) => (prevSlide + 1) % travelGuides.length);
+  }, [travelGuides.length]);
+
+  const prevSlide = useCallback(() => {
+    setCurrentSlide((prevSlide) => (prevSlide - 1 + travelGuides.length) % travelGuides.length);
+  }, [travelGuides.length]);
+
+  const goToSlide = useCallback((index) => {
+    setCurrentSlide(index);
+  }, []);
+
+  const toggleLike = useCallback((postId) => {
+    setLikedPosts(prev => ({
+      ...prev,
+      [postId]: !prev[postId]
+    }));
+  }, []);
+
+  const handleShare = useCallback((post) => {
+    setCurrentPost(post);
+    setShowShareModal(true);
+  }, []);
+
+  const handleCloseShareModal = useCallback(() => {
+    setShowShareModal(false);
+    setCurrentPost(null);
+  }, []);
+
+  const copyToClipboard = useCallback(() => {
+    navigator.clipboard.writeText(window.location.href);
+    alert('Link copied to clipboard!');
+  }, []);
+
+  const stats = useMemo(() => [
+    { number: '50+', label: 'Destinations' },
+    { number: '200+', label: 'Travel Guides' },
+    { number: '15K', label: 'Monthly Readers' },
+    { number: '95%', label: 'Visitor Satisfaction' }
+  ], []);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-pink-50 to-white">
@@ -466,12 +641,7 @@ const Blog = () => {
       <main className="container mx-auto px-4 py-16">
         {/* Stats Section */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-16">
-          {[
-            { number: '50+', label: 'Destinations' },
-            { number: '200+', label: 'Travel Guides' },
-            { number: '15K', label: 'Monthly Readers' },
-            { number: '95%', label: 'Visitor Satisfaction' }
-          ].map((stat, index) => (
+          {stats.map((stat, index) => (
             <div key={index} className="bg-white rounded-xl p-6 text-center shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-2">
               <div className="text-3xl font-bold bg-gradient-to-r from-pink-500 to-purple-600 bg-clip-text text-transparent">{stat.number}</div>
               <div className="text-gray-600 mt-2">{stat.label}</div>
@@ -501,7 +671,7 @@ const Blog = () => {
           <div className="bg-white rounded-2xl shadow-xl overflow-hidden transform transition-all duration-500 hover:shadow-2xl">
             <div className="md:flex">
               <div className="md:flex-shrink-0 md:w-1/2 relative overflow-hidden">
-                <img
+                <LazyImage
                   className="h-64 w-full object-cover md:h-full transition-transform duration-700 hover:scale-105"
                   src={featuredPost.image}
                   alt={featuredPost.title} />
@@ -625,7 +795,7 @@ const Blog = () => {
                 >
                   <div className="flex flex-col md:flex-row h-full">
                     <div className="md:w-1/2 h-full overflow-hidden">
-                      <img
+                      <LazyImage
                         src={guide.image}
                         alt={guide.month}
                         className="w-full h-full object-cover transition-transform duration-1000 ease-in-out hover:scale-105" />
@@ -719,79 +889,15 @@ const Blog = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredPosts.length > 0 ? (
               filteredPosts.map(post => (
-                <div key={post.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 group">
-                  <div className="relative overflow-hidden">
-                    <img 
-                      className="h-48 w-full object-cover transition-transform duration-700 group-hover:scale-110" 
-                      src={post.image} 
-                      alt={post.title} 
-                    />
-                    <div className="absolute top-4 right-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white text-xs px-3 py-1 rounded-full shadow-md">
-                      {post.category}
-                    </div>
-                    <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-black/60 to-transparent"></div>
-                  </div>
-                  <div className="p-6">
-                    <div className="flex items-center text-xs text-gray-500 mb-3">
-                      <span>{post.date}</span>
-                      <span className="mx-2">•</span>
-                      <span>{post.readTime}</span>
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-3 hover:text-pink-600 cursor-pointer transition-colors">{post.title}</h3>
-                    <p className="text-gray-600 text-sm mb-4 leading-relaxed">{post.excerpt}</p>
-                    {expandedPosts[post.id] && (
-                      <p className="text-gray-700 text-sm mb-4 leading-relaxed animate-fade-in">{post.fullContent}</p>
-                    )}
-                    
-                    <div className="flex items-center justify-between mt-4">
-                      <div className="flex items-center">
-                        <div className="bg-gradient-to-r from-pink-100 to-purple-100 rounded-full h-8 w-8 flex items-center justify-center mr-2 shadow-inner">
-                          <span className="text-pink-700 text-xs font-bold">{post.author?.charAt(0) || 'U'}</span>
-                        </div>
-                        <span className="text-xs text-gray-600">{post.author || 'Unknown'}</span>
-                      </div>
-                      
-                      <div className="flex items-center space-x-3">
-                        <button 
-                          onClick={() => toggleLike(post.id)}
-                          className="flex items-center text-gray-500 hover:text-pink-500 transition-colors group"
-                          title="Like this post"
-                        >
-                          <svg 
-                            xmlns="http://www.w3.org/2000/svg" 
-                            className={`h-5 w-5 ${likedPosts[post.id] ? 'text-pink-500 fill-current' : 'group-hover:scale-110 transition-transform'}`} 
-                            fill={likedPosts[post.id] ? "currentColor" : "none"} 
-                            viewBox="0 0 24 24" 
-                            stroke="currentColor"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                          </svg>
-                          <span className="text-xs ml-1">{post.likes + (likedPosts[post.id] ? 1 : 0)}</span>
-                        </button>
-                        
-                        <button 
-                          onClick={() => handleShare(post)}
-                          className="text-gray-500 hover:text-blue-500 transition-colors"
-                          title="Share this post"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <button 
-                      onClick={() => toggleReadMore(post.id)}
-                      className="w-full mt-4 text-center text-pink-500 hover:text-pink-700 text-sm font-medium transition-colors flex items-center justify-center group"
-                    >
-                      {expandedPosts[post.id] ? 'Read Less' : 'Read More'}
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 transform group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  expandedPosts={expandedPosts}
+                  likedPosts={likedPosts}
+                  onToggleReadMore={toggleReadMore}
+                  onToggleLike={toggleLike}
+                  onShare={handleShare}
+                />
               ))
             ) : (
               <div className="col-span-full text-center py-12 animate-fade-in">
@@ -877,36 +983,10 @@ const Blog = () => {
             </div>
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
               {destinations.map(destination => (
-                <div key={destination.id} className="bg-gray-50 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
-                  <div className="overflow-hidden">
-                    <img 
-                      src={destination.image} 
-                      alt={destination.name}
-                      className="w-full h-48 object-cover transition-transform duration-700 hover:scale-110"
-                    />
-                  </div>
-                  <div className="p-4">
-                    <h3 className="text-xl font-bold text-gray-800 mb-2">{destination.name}</h3>
-                    <p className="text-gray-600 mb-3">{destination.description}</p>
-                    <div className="mb-3">
-                      <span className="font-semibold text-pink-600">Best Time to Visit:</span>
-                      <span className="text-gray-700 ml-2">{destination.bestTime}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-pink-600">Main Attractions:</span>
-                      <ul className="text-gray-700 mt-1 space-y-1">
-                        {destination.attractions.map((attr, index) => (
-                          <li key={index} className="flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                            {attr}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
+                <DestinationCard
+                  key={destination.id}
+                  destination={destination}
+                />
               ))}
             </div>
             <div className="p-6 border-t bg-gray-50 rounded-b-2xl text-center">
@@ -944,10 +1024,10 @@ const Blog = () => {
                   className="relative group cursor-pointer overflow-hidden rounded-xl transform transition-all duration-500 hover:scale-105"
                   onClick={() => handleImageClick(image)}
                 >
-                  <img 
+                  <LazyImage
                     src={image.src} 
                     alt={image.title}
-                    className="w-full h-64 object-cover transition-transform duration-700 group-hover:scale-110"
+                    className="h-64 w-full transition-transform duration-700 group-hover:scale-110"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
                     <div className="text-white">
@@ -1003,7 +1083,7 @@ const Blog = () => {
             </button>
             
             <div className="flex flex-col items-center">
-              <img 
+              <LazyImage
                 src={selectedImage.src} 
                 alt={selectedImage.title}
                 className="max-w-full max-h-[70vh] object-contain rounded-lg"

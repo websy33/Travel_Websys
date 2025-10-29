@@ -23,15 +23,19 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
   sendEmailVerification,
   updateProfile
 } from 'firebase/auth';
-import { auth } from '../firebase';
-import { signInWithGoogleAndCheckApproval } from '../firebase';
-import PendingApprovalModal from '../Components/PendingApprovalModal.jsx';
+import { auth, googleProvider } from '../firebase';
+import useHotelStorage from '../hooks/useHotelStorage';
+import { migrateLocalStorageToFirebase } from '../utils/migrateToFirebase';
+import HotelDashboard from '../Components/Hotels/auth/HotelDashboard';
+import HotelAuthWrapper from '../Components/Hotels/auth/HotelAuthWrapper';
 
 // Fixed color animation variants
 const containerVariants = {
@@ -1045,13 +1049,13 @@ const EnhancedHotelRegistration = ({
           exit={{ opacity: 0 }}
         >
           <motion.div 
-            className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] shadow-2xl"
+            className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-auto shadow-2xl"
             variants={modalVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
           >
-            <div className="p-8 overflow-y-auto max-h-[90vh]">
+            <div className="p-8">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">Hotel Registration</h2>
                 <button 
@@ -1322,11 +1326,11 @@ const EnhancedHotelRegistration = ({
                 </motion.button>
 
                 <div className="text-center">
-                  <p className="text-gray-600 text-sm">
+                  <p className="text-gray-600">
                     Already have an account?{' '}
                     <button
                       type="button"
-                      className="text-rose-600 hover:text-rose-700 font-medium transition-colors text-sm"
+                      className="text-rose-600 hover:text-rose-700 font-medium transition-colors"
                       onClick={switchToLogin}
                     >
                       Login here
@@ -1447,19 +1451,19 @@ const EnhancedLogin = ({
     <AnimatePresence>
       {showLoginModal && (
         <motion.div 
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4 backdrop-blur-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
           <motion.div 
-            className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh]"
+            className="bg-white rounded-2xl w-full max-w-md mx-4 shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
             variants={modalVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
           >
-            <div className="p-8 overflow-y-auto max-h-[90vh]">
+            <div className="p-4 sm:p-8">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">
                   {isLocked ? 'Account Locked' : 'Login to KashmirStays'}
@@ -1501,43 +1505,123 @@ const EnhancedLogin = ({
                     </motion.div>
                   )}
 
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <p className="text-blue-700 text-sm text-center">
-                      Sign in is Google-only. Access will be granted after admin approval.
-                    </p>
+                  <EnhancedInput
+                    label="Email Address"
+                    name="email"
+                    type="email"
+                    value={loginForm.email}
+                    onChange={handleLoginChange}
+                    placeholder="your@email.com"
+                    required
+                    icon={FiMail}
+                    error={formErrors.email}
+                    validationRule={validationRules.email}
+                  />
+
+                  <EnhancedInput
+                    label="Password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    value={loginForm.password}
+                    onChange={handleLoginChange}
+                    placeholder="Enter your password"
+                    required
+                    icon={FiLock}
+                    error={formErrors.password}
+                  />
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Login As</label>
+                    <select
+                      name="role"
+                      className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
+                      value={loginForm.role}
+                      onChange={handleLoginChange}
+                    >
+                      <option value="hotel">Hotel</option>
+                      <option value="admin">Admin</option>
+                    </select>
                   </div>
 
-                  <div className="relative my-6">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-300"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-white text-gray-500">Continue</span>
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={showPassword}
+                        onChange={() => setShowPassword(!showPassword)}
+                        className="h-4 w-4 text-rose-600 rounded focus:ring-rose-500"
+                      />
+                      <span className="text-sm text-gray-700">Show password</span>
+                    </label>
+                    
+                    <button
+                      type="button"
+                      className="text-sm text-rose-600 hover:text-rose-700 transition-colors"
+                    >
+                      Forgot password?
+                    </button>
                   </div>
+
+                  {loginAttempts > 0 && !authError && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                      <p className="text-yellow-700 text-sm text-center">
+                        {3 - loginAttempts} login attempts remaining
+                      </p>
+                    </div>
+                  )}
 
                   <motion.button
-                    type="button"
-                    onClick={onGoogleLogin}
+                    type="submit"
                     disabled={loading}
-                    className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 py-3.5 rounded-lg font-medium transition-all duration-300 shadow-md hover:shadow-lg flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 text-white py-3.5 rounded-lg font-medium transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     whileHover={{ scale: loading ? 1 : 1.02 }}
                     whileTap={{ scale: loading ? 1 : 0.98 }}
                   >
                     {loading ? (
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                     ) : (
-                      <svg className="w-5 h-5" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                      </svg>
+                      <FiLogIn className="mr-2" size={18} />
                     )}
-                    <span>{loading ? 'Signing in...' : 'Continue with Google'}</span>
+                    <span>{loading ? 'Signing in...' : 'Login to Account'}</span>
                   </motion.button>
 
-                  <div className="text-center">
+
+
+                  {loginForm.role === 'hotel' && (
+                    <>
+                      <div className="relative my-6">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-gray-300"></div>
+                        </div>
+                        <div className="relative flex justify-center text-sm">
+                          <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                        </div>
+                      </div>
+
+                      <motion.button
+                        type="button"
+                        onClick={onGoogleLogin}
+                        disabled={loading}
+                        className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 py-3.5 rounded-lg font-medium transition-all duration-300 shadow-md hover:shadow-lg flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                        whileHover={{ scale: loading ? 1 : 1.02 }}
+                        whileTap={{ scale: loading ? 1 : 0.98 }}
+                      >
+                        {loading ? (
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+                        ) : (
+                          <svg className="w-5 h-5" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                          </svg>
+                        )}
+                        <span>{loading ? 'Signing in...' : 'Sign in with Google'}</span>
+                      </motion.button>
+                    </>
+                  )}
+
+                  <div className="text-center mt-6">
                     <p className="text-gray-600">
                       Don't have an account?{' '}
                       <button
@@ -1555,7 +1639,7 @@ const EnhancedLogin = ({
               )}
             </div>
           </motion.div>
-        </motion.div>
+        </motion.div>  
       )}
     </AnimatePresence>
   );
@@ -1625,8 +1709,9 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
           bookedRooms: 0,
           blockedRooms: 0,
           price: room?.price || 0,
-          clientName: '',
-          bookingReference: ''
+          clients: [], // Array of client bookings
+          checkInTime: '2:00 PM',
+          checkOutTime: '12:00 PM'
         };
       }
       setAvailabilityData(defaultData);
@@ -1948,114 +2033,157 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
                       </div>
                     </div>
 
-                    {dayData.clientName && (
+                    {/* Booking Information Display - Multiple Clients */}
+                    {dayData.clients && dayData.clients.length > 0 && (
                       <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200">
-                        <div className="text-indigo-600 text-sm font-medium">Client Name</div>
-                        <div className="text-lg font-bold text-indigo-700">{dayData.clientName}</div>
-                        {dayData.bookingReference && (
-                          <div className="text-sm text-indigo-600 mt-1">Ref: {dayData.bookingReference}</div>
-                        )}
+                        <div className="text-indigo-600 text-sm font-medium mb-2">Client Names ({dayData.clients.length})</div>
+                        <div className="flex flex-wrap gap-2">
+                          {dayData.clients.map((client, idx) => (
+                            <span key={idx} className="bg-white text-indigo-700 px-3 py-1 rounded-full text-sm font-medium border border-indigo-200">
+                              {client}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Contact Details Section - Always show for guests */}
+                    {!isEditable && (
+                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border-2 border-blue-300 shadow-md">
+                        <h5 className="font-bold text-blue-900 mb-3 flex items-center text-lg">
+                          <FiPhone className="mr-2" size={20} />
+                          Contact Hotel for Booking
+                        </h5>
+                        <div className="space-y-3">
+                          <div className="bg-white p-3 rounded-lg">
+                            <div className="flex items-center space-x-2 text-gray-700">
+                              <FiPhone className="text-blue-600" size={18} />
+                              <span className="font-semibold">Phone:</span>
+                            </div>
+                            <a href={`tel:${room?.contact?.phone || '+91 1234567890'}`} className="text-blue-600 hover:underline font-medium text-lg ml-6">
+                              {room?.contact?.phone || '+91 1234567890'}
+                            </a>
+                          </div>
+                          <div className="bg-white p-3 rounded-lg">
+                            <div className="flex items-center space-x-2 text-gray-700">
+                              <FiMail className="text-blue-600" size={18} />
+                              <span className="font-semibold">Email:</span>
+                            </div>
+                            <a href={`mailto:${room?.contact?.email || 'booking@hotel.com'}`} className="text-blue-600 hover:underline font-medium ml-6">
+                              {room?.contact?.email || 'booking@hotel.com'}
+                            </a>
+                          </div>
+                          <div className="bg-blue-100 p-3 rounded-lg mt-3">
+                            <p className="text-sm text-blue-800 font-medium flex items-start">
+                              <FiInfo className="mr-2 mt-0.5 flex-shrink-0" size={16} />
+                              <span>Call or email us directly to check availability and make your reservation for this date. Our team is ready to assist you!</span>
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
 
                     {isEditable && (
                       <div className="space-y-3 pt-4 border-t border-gray-200">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Room Status
-                          </label>
-                          <select
-                            value={dayData.status}
-                            onChange={(e) => updateAvailability(selectedDate, 'status', e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="available">Available</option>
-                            <option value="booked">Booked</option>
-                            <option value="blocked">Blocked</option>
-                          </select>
-                        </div>
-                        
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Total Rooms
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={dayData.totalRooms}
-                              onChange={(e) => updateAvailability(selectedDate, 'totalRooms', parseInt(e.target.value) || 0)}
-                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                            <select
+                              value={dayData.status}
+                              onChange={(e) => updateAvailability(selectedDate, 'status', e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="available">Available</option>
+                              <option value="booked">Booked</option>
+                              <option value="blocked">Blocked</option>
+                            </select>
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Booked Rooms
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max={dayData.totalRooms}
-                              value={dayData.bookedRooms}
-                              onChange={(e) => updateAvailability(selectedDate, 'bookedRooms', parseInt(e.target.value) || 0)}
-                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Blocked Rooms
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max={dayData.totalRooms}
-                              value={dayData.blockedRooms || 0}
-                              onChange={(e) => updateAvailability(selectedDate, 'blockedRooms', parseInt(e.target.value) || 0)}
-                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Price (₹)
-                            </label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Price (₹)</label>
                             <input
                               type="number"
                               min="0"
                               value={dayData.price || 0}
                               onChange={(e) => updateAvailability(selectedDate, 'price', parseInt(e.target.value) || 0)}
-                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                             />
                           </div>
                         </div>
                         
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Client Name
-                          </label>
-                          <input
-                            type="text"
-                            value={dayData.clientName || ''}
-                            onChange={(e) => updateAvailability(selectedDate, 'clientName', e.target.value)}
-                            placeholder="Enter client name (for bookings)"
-                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Total</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={dayData.totalRooms}
+                              onChange={(e) => updateAvailability(selectedDate, 'totalRooms', parseInt(e.target.value) || 0)}
+                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Booked</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={dayData.bookedRooms}
+                              onChange={(e) => updateAvailability(selectedDate, 'bookedRooms', parseInt(e.target.value) || 0)}
+                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Blocked</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={dayData.blockedRooms || 0}
+                              onChange={(e) => updateAvailability(selectedDate, 'blockedRooms', parseInt(e.target.value) || 0)}
+                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
                         </div>
                         
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Booking Reference
-                          </label>
-                          <input
-                            type="text"
-                            value={dayData.bookingReference || ''}
-                            onChange={(e) => updateAvailability(selectedDate, 'bookingReference', e.target.value)}
-                            placeholder="Enter booking reference number"
-                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
+                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                          <div className="flex justify-between items-center mb-2">
+                            <h5 className="font-semibold text-blue-900">Client Names ({(dayData.clients || []).length})</h5>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const clients = dayData.clients || [];
+                                updateAvailability(selectedDate, 'clients', [...clients, '']);
+                              }}
+                              className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700"
+                            >
+                              + Add
+                            </button>
+                          </div>
+                          
+                          {(dayData.clients || []).map((client, idx) => (
+                            <div key={idx} className="flex gap-2 mb-2">
+                              <input
+                                type="text"
+                                value={client || ''}
+                                onChange={(e) => {
+                                  const clients = [...(dayData.clients || [])];
+                                  clients[idx] = e.target.value;
+                                  updateAvailability(selectedDate, 'clients', clients);
+                                }}
+                                placeholder="Client name"
+                                className="flex-1 p-2 border rounded text-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const clients = [...(dayData.clients || [])];
+                                  clients.splice(idx, 1);
+                                  updateAvailability(selectedDate, 'clients', clients);
+                                }}
+                                className="text-red-600 hover:text-red-800 px-2"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -2585,16 +2713,11 @@ const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
         
         <div className="p-6 md:w-3/5 flex flex-col">
           <div className="flex-grow">
-            <div className="flex justify-between">
-              <div>
-                <h3 className="text-2xl font-bold text-gray-800 mb-1">{hotelName}</h3>
-                <div className="flex items-center text-gray-600">
-                  <FiMapPin className="mr-2 text-rose-500" size={16} />
-                  <span>{hotelLocation}</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-gray-500 text-sm">({hotelReviews} reviews)</div>
+            <div className="mb-3">
+              <h3 className="text-2xl font-bold text-gray-800 mb-1">{hotelName}</h3>
+              <div className="flex items-center text-gray-600">
+                <FiMapPin className="mr-2 text-rose-500 flex-shrink-0" size={16} />
+                <span className="truncate">{hotelLocation}</span>
               </div>
             </div>
             
@@ -2626,6 +2749,7 @@ const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
               <p className="text-gray-500 text-sm">Starting from</p>
               <p className="text-3xl font-bold text-gray-800">₹{hotelPrice.toLocaleString()}</p>
               <p className="text-gray-500 text-xs">+ ₹{hotelTaxes.toLocaleString()} taxes & fees</p>
+              <p className="text-gray-500 text-sm mt-2">({hotelReviews} reviews)</p>
             </div>
             <motion.button 
               className="bg-rose-600 hover:bg-rose-700 text-white px-6 py-2.5 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg flex items-center"
@@ -2654,8 +2778,6 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [firebaseLoading, setFirebaseLoading] = useState(true);
   const [googleSignInInProgress, setGoogleSignInInProgress] = useState(false);
-  const [pendingModalOpen, setPendingModalOpen] = useState(false);
-  const [pendingEmail, setPendingEmail] = useState('');
   const [sortBy, setSortBy] = useState('price');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAmenities, setSelectedAmenities] = useState([]);
@@ -2769,112 +2891,73 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       phone: '',
       email: ''
     },
-    declaration: {
-      termsAccepted: false,
-      dataAccuracy: false,
-      marketingConsent: false
-    },
+    seasonalRates: [],
+    blackoutDates: [],
     status: 'pending',
     submittedBy: '',
     submissionDate: new Date().toISOString(),
     hotelId: ''
   });
 
-  // Initialize state with localStorage data
-  const [hotels, setHotels] = useState(() => {
-    const saved = localStorage.getItem('kashmirStays_hotels');
-    return saved ? JSON.parse(saved) : [
-      {
-        id: 1,
-        name: 'Hotel Dal View',
-        location: 'Boulevard Road, Srinagar, Jammu and Kashmir 190001',
-        rating: 4.5,
-        reviews: 892,
-        stars: 4,
-        price: 30000,
-        taxes: 1200,
-        image: "/images/Dalview.webp",
-        description: 'Nestled along the picturesque Boulevard Road overlooking Dal Lake, Hotel Dal View offers breathtaking views of the Himalayan mountains and direct access to the famous shikara rides. This charming property combines traditional Kashmiri architecture with modern comforts.',
-        amenities: [
-          'Free WiFi', 
-          'Lake View', 
-          'Restaurant', 
-          'Garden', 
-          '24-Hour Front Desk', 
-          'Room Service', 
-          'Laundry Service', 
-          'Travel Desk', 
-          'Parking', 
-          'Doctor on Call'
-        ],
-        rooms: [
-          { 
-            id: 101, 
-            type: 'Premium Room', 
-            price: 32000, 
-            size: '300 sq ft', 
-            beds: '1 King Bed',
-            amenities: [
-              'Heating', 
-              'TV', 
-              'Tea/Coffee Maker', 
-              'Balcony', 
-              'Bathroom Amenities'
-            ], 
-            maxOccupancy: 2,
-            availability: true,
-            totalRooms: 15,
-            availabilityData: {
-              '2024-12-25': { totalRooms: 15, bookedRooms: 15, price: 45000, available: false },
-              '2024-12-26': { totalRooms: 15, bookedRooms: 12, price: 45000, available: true },
-              '2024-12-27': { totalRooms: 15, bookedRooms: 8, price: 42000, available: true },
-            },
-            images: [
-              "/images/Premium Room.webp",
-              "/images/Dalview.jpeg"
-            ]
-          }
-        ],
-        policies: {
-          checkIn: '12:00 PM',
-          checkOut: '11:00 AM',
-          cancellation: 'Free cancellation up to 72 hours before arrival',
-          pets: 'Not allowed',
-          payment: 'Credit card or cash accepted',
-          children: 'Children under 12 stay free with parents'
-        },
-        nearbyAttractions: [
-          'Dal Lake (on property)',
-          'Mughal Gardens (3 km)',
-          'Shankaracharya Temple (5 km)',
-          'Hazratbal Shrine (4 km)',
-          'Old City Markets (6 km)',
-          'Pari Mahal (7 km)'
-        ],
-        specialFeatures: [
-          'Authentic Kashmiri Wazwan Cuisine',
-          'Shikara Pickup from Hotel Dock',
-          'Cultural Evenings with Folk Music',
-          'Houseboat Stay Packages Available',
-          'Guided Local Tours'
-        ],
-        contact: {
-          phone: '+91 194-245-1234',
-          email: 'info@hoteldalview.com'
-        },
-        status: 'approved',
-        submittedBy: 'Hotel Dal View',
-        submissionDate: new Date('2024-01-01').toISOString(),
-        hotelId: 'hoteldalview'
-      }
-    ];
-  });
+  // Form steps configuration - UPDATED with 6th step
+  const formSteps = [
+    {
+      number: 1,
+      title: "Basic Information",
+      description: "Hotel name, location, and basic details",
+      fields: ['name', 'location', 'stars', 'rating', 'price', 'taxes', 'description', 'image']
+    },
+    {
+      number: 2,
+      title: "Amenities & Facilities",
+      description: "Select available amenities and features",
+      fields: ['amenities']
+    },
+    {
+      number: 3,
+      title: "Room Configuration",
+      description: "Add and configure room types",
+      fields: ['rooms']
+    },
+    {
+      number: 4,
+      title: "Rate Management",
+      description: "Configure seasonal rates and blackout dates",
+      fields: ['seasonalRates', 'blackoutDates']
+    },
+    {
+      number: 5,
+      title: "Policies & Contact",
+      description: "Set policies and contact information",
+      fields: ['policies', 'contact']
+    },
+    {
+      number: 6,
+      title: "Additional Details",
+      description: "Nearby attractions and special features",
+      fields: ['nearbyAttractions', 'specialFeatures']
+    },
+    {
+      number: 7,
+      title: "Review & Submit",
+      description: "Final review and submission for approval",
+      fields: ['review', 'terms']
+    }
+  ];
 
-  // Pending hotels for admin approval
-  const [pendingHotels, setPendingHotels] = useState(() => {
-    const saved = localStorage.getItem('kashmirStays_pendingHotels');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // Use Firestore hook for hotel management
+  const {
+    hotels,
+    pendingHotels,
+    loading: hotelStorageLoading,
+    error: hotelStorageError,
+    addHotel,
+    approveHotel: approveHotelFirestore,
+    rejectHotel: rejectHotelFirestore,
+    updateHotel,
+    deleteHotel: deleteHotelFirestore,
+    refreshData
+  } = useHotelStorage();
 
   // Hotel users (hotel management accounts)
   const [hotelUsers, setHotelUsers] = useState(() => {
@@ -2908,51 +2991,44 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     role: 'admin'
   });
 
-  // Form steps configuration
-  const formSteps = [
-    {
-      number: 1,
-      title: "Basic Information",
-      description: "Hotel name, location, and basic details",
-      fields: ['name', 'location', 'stars', 'rating', 'price', 'taxes', 'description', 'image']
-    },
-    {
-      number: 2,
-      title: "Amenities & Facilities",
-      description: "Select available amenities and features",
-      fields: ['amenities']
-    },
-    {
-      number: 3,
-      title: "Room Configuration",
-      description: "Add and configure room types",
-      fields: ['rooms']
-    },
-    {
-      number: 4,
-      title: "Policies & Contact",
-      description: "Set policies and contact information",
-      fields: ['policies', 'contact']
-    },
-    {
-      number: 5,
-      title: "Additional Details",
-      description: "Nearby attractions and special features",
-      fields: ['nearbyAttractions', 'specialFeatures']
-    },
-    {
-      number: 6,
-      title: "Declaration & Submit",
-      description: "Review and confirm your submission",
-      fields: ['declaration']
-    }
-  ];
+  // Terms and conditions state
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   // Firebase Authentication Integration
   useEffect(() => {
     let unsubscribe;
     
     try {
+      // Check for redirect result first
+      getRedirectResult(auth).then((result) => {
+        if (result) {
+          const user = result.user;
+          console.log('Google sign-in redirect successful:', user.email);
+          
+          const userData = {
+            uid: user.uid,
+            id: user.uid,
+            email: user.email,
+            name: user.displayName || user.email.split('@')[0],
+            role: 'hotel',
+            hotelName: `${user.displayName || 'User'}'s Hotel`,
+            photoURL: user.photoURL,
+            emailVerified: user.emailVerified
+          };
+          
+          setIsAuthenticated(true);
+          setUserRole('hotel');
+          setCurrentUser(userData);
+          setShowLoginModal(false);
+          
+          localStorage.setItem('currentUser', JSON.stringify(userData));
+          localStorage.setItem('isAuthenticated', 'true');
+          localStorage.setItem('userRole', 'hotel');
+        }
+      }).catch((error) => {
+        console.error('Redirect result error:', error);
+      });
+      
       unsubscribe = onAuthStateChanged(auth, (user) => {
         setFirebaseLoading(true);
         try {
@@ -2973,7 +3049,6 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
               role: 'hotel',
               hotelName: hotelUser?.hotelName || 'Hotel Owner',
               emailVerified: user.emailVerified,
-              hotels: hotelUser?.hotels || [],
               ...hotelUser
             };
             
@@ -2992,7 +3067,6 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
           console.error('Auth state change error:', error);
         } finally {
           setFirebaseLoading(false);
-          setGoogleSignInInProgress(false);
         }
       });
     } catch (error) {
@@ -3004,7 +3078,6 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       if (unsubscribe) {
         unsubscribe();
       }
-      setGoogleSignInInProgress(false);
     };
   }, [hotelUsers]);
 
@@ -3074,7 +3147,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     }
   };
 
-  // Enhanced Google Sign-In Handler with Better Error Handling
+  // Enhanced Google Sign-In Handler with Redirect Method
   const handleGoogleSignIn = async () => {
     if (loading || googleSignInInProgress) return null;
     
@@ -3082,23 +3155,18 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     setGoogleSignInInProgress(true);
     
     try {
-      const res = await signInWithGoogleAndCheckApproval();
-      if (res.status === 'pending') {
-        setPendingEmail(res.user?.email || '');
-        setPendingModalOpen(true);
-        return null;
-      }
-      if (res.status === 'approved') {
-        // success; the global auth state will update and UI can react accordingly
-        return {
-          uid: res.user.uid,
-          email: res.user.email,
-          name: res.user.displayName || res.user.email.split('@')[0],
-          role: res.role,
-          photoURL: res.user.photoURL,
-          emailVerified: res.user.emailVerified,
-        };
-      }
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ 
+        prompt: 'select_account'
+      });
+      
+      console.log('Attempting Google sign-in...');
+      
+      // Use redirect instead of popup to avoid COOP issues
+      const { signInWithRedirect } = await import('firebase/auth');
+      await signInWithRedirect(auth, provider);
+      
+      // The redirect will handle the rest
       return null;
     } catch (error) {
       console.error('Google sign-in error:', error);
@@ -3106,15 +3174,6 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       let errorMessage = 'Google sign-in failed. Please try again.';
       
       switch (error.code) {
-        case 'auth/popup-closed-by-user':
-          console.log('User closed the popup');
-          return null;
-        case 'auth/popup-blocked':
-          errorMessage = 'Popup was blocked by browser. Please allow popups and try again.';
-          break;
-        case 'auth/cancelled-popup-request':
-          console.log('Popup request was cancelled');
-          return null;
         case 'auth/network-request-failed':
           errorMessage = 'Network error. Please check your internet connection.';
           break;
@@ -3260,18 +3319,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     }
   }, [showAdminLogin, showRegister, location.pathname]);
 
-  // Save to localStorage whenever state changes
-  useEffect(() => {
-    localStorage.setItem('kashmirStays_hotels', JSON.stringify(hotels));
-  }, [hotels]);
-
-  useEffect(() => {
-    localStorage.setItem('kashmirStays_pendingHotels', JSON.stringify(pendingHotels));
-  }, [pendingHotels]);
-
-  useEffect(() => {
-    localStorage.setItem('kashmirStays_hotelUsers', JSON.stringify(hotelUsers));
-  }, [hotelUsers]);
+  // Firestore handles persistence automatically - no localStorage needed
 
   // Load user authentication state from localStorage
   useEffect(() => {
@@ -3302,10 +3350,31 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
     // Cleanup function for component unmount
     return () => {
-      setGoogleSignInInProgress(false);
       setLoading(false);
     };
   }, []);
+
+  // Migration handler
+  const handleMigration = async () => {
+    if (!window.confirm('This will migrate all localStorage data to Firebase. Continue?')) {
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const result = await migrateLocalStorageToFirebase();
+      if (result.success) {
+        alert(`Migration successful! Migrated ${result.migratedCount} hotels.`);
+        await refreshData();
+      } else {
+        alert('Migration failed: ' + result.error);
+      }
+    } catch (error) {
+      alert('Migration error: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Data Export/Import Functions
   const exportHotelData = () => {
@@ -3356,53 +3425,52 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   };
 
   // Enhanced Room Availability Management
-  const updateHotelRoomAvailability = (hotelId, roomId, availabilityData) => {
-    setHotels(prev => {
-      const updatedHotels = prev.map(hotel => {
-        if (hotel.id === hotelId) {
-          const updatedRooms = hotel.rooms.map(room => {
-            if (room.id === roomId) {
-              return { 
-                ...room, 
-                availabilityData: {
-                  ...room.availabilityData,
-                  ...availabilityData
-                }
-              };
-            }
-            return room;
-          });
-          return { ...hotel, rooms: updatedRooms };
-        }
-        return hotel;
-      });
-      
-      return updatedHotels;
+  const updateHotelRoomAvailability = async (hotelId, roomId, availabilityData) => {
+    const hotel = hotels.find(h => h.id === hotelId);
+    if (!hotel) return;
+    
+    const updatedRooms = hotel.rooms.map(room => {
+      if (room.id === roomId) {
+        return { 
+          ...room, 
+          availabilityData: {
+            ...room.availabilityData,
+            ...availabilityData
+          }
+        };
+      }
+      return room;
     });
+    
+    try {
+      await updateHotel(hotelId, { rooms: updatedRooms });
+    } catch (error) {
+      console.error('Failed to update room availability:', error);
+    }
   };
 
-  const handleBulkRoomUpdate = (hotelId, roomId, updates) => {
-    setHotels(prev => {
-      const updatedHotels = prev.map(hotel => {
-        if (hotel.id === hotelId) {
-          const updatedRooms = hotel.rooms.map(room => {
-            if (room.id === roomId) {
-              return {
-                ...room,
-                availabilityData: {
-                  ...room.availabilityData,
-                  ...updates
-                }
-              };
-            }
-            return room;
-          });
-          return { ...hotel, rooms: updatedRooms };
-        }
-        return hotel;
-      });
-      return updatedHotels;
+  const handleBulkRoomUpdate = async (hotelId, roomId, updates) => {
+    const hotel = hotels.find(h => h.id === hotelId);
+    if (!hotel) return;
+    
+    const updatedRooms = hotel.rooms.map(room => {
+      if (room.id === roomId) {
+        return {
+          ...room,
+          availabilityData: {
+            ...room.availabilityData,
+            ...updates
+          }
+        };
+      }
+      return room;
     });
+    
+    try {
+      await updateHotel(hotelId, { rooms: updatedRooms });
+    } catch (error) {
+      console.error('Failed to bulk update rooms:', error);
+    }
   };
 
   // Handle logout function
@@ -3452,8 +3520,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     }
 
     if (step === 6) {
-      if (!hotelForm.declaration.termsAccepted) errors.termsAccepted = 'You must accept the terms and conditions';
-      if (!hotelForm.declaration.dataAccuracy) errors.dataAccuracy = 'You must confirm data accuracy';
+      if (!termsAccepted) errors.terms = 'You must accept the terms and conditions';
     }
 
     setFormErrors(errors);
@@ -3606,18 +3673,6 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       ...prev,
       policies: {
         ...prev.policies,
-        [field]: value
-      }
-    }));
-  };
-
-  // Handle declaration change
-  const handleDeclarationChange = (field, value) => {
-    setFormErrors(prev => ({ ...prev, [field]: '' }));
-    setHotelForm(prev => ({
-      ...prev,
-      declaration: {
-        ...prev.declaration,
         [field]: value
       }
     }));
@@ -3847,10 +3902,10 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       localStorage.setItem('firebaseUID', userData.uid);
       
       setLoginForm({
-        email: '',
-        password: '',
-        role: 'hotel'
-      });
+          email: '',
+          password: '',
+          role: 'hotel'
+        });
       
       return true;
     } catch (error) {
@@ -3862,18 +3917,9 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   // Fixed Google Login Handler
   const handleGoogleLogin = async () => {
     try {
-      const userData = await handleGoogleSignIn();
-      if (!userData) return false;
-      
-      setIsAuthenticated(true);
-      setUserRole('hotel');
-      setCurrentUser(userData);
-      setShowLoginModal(false);
-      
-      localStorage.setItem('currentUser', JSON.stringify(userData));
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('userRole', 'hotel');
-      
+      await handleGoogleSignIn();
+      // Redirect method doesn't return user data immediately
+      // The redirect result will be handled in useEffect
       return true;
     } catch (error) {
       console.error('Login error:', error);
@@ -3919,7 +3965,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   };
 
   // Submit new hotel property (for hotels) - Goes to pending approval
-  const submitNewHotel = (e) => {
+  const submitNewHotel = async (e) => {
     e.preventDefault();
     
     for (let step = 1; step <= formSteps.length; step++) {
@@ -3931,7 +3977,6 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     }
 
     const newHotel = {
-      id: Date.now(),
       name: hotelForm.name,
       location: hotelForm.location,
       rating: parseFloat(hotelForm.rating) || 4.0,
@@ -3979,16 +4024,21 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       hotelId: currentUser?.id || ''
     };
 
-    setPendingHotels(prev => [...prev, newHotel]);
-    
-    if (currentUser) {
-      const updatedHotelUsers = hotelUsers.map(user => 
-        user.id === currentUser.id 
-          ? { ...user, hotels: [...(user.hotels || []), newHotel.id] }
-          : user
-      );
-      setHotelUsers(updatedHotelUsers);
-      setCurrentUser({ ...currentUser, hotels: [...(currentUser.hotels || []), newHotel.id] });
+    try {
+      await addHotel(newHotel);
+      
+      if (currentUser) {
+        const updatedHotelUsers = hotelUsers.map(user => 
+          user.id === currentUser.id 
+            ? { ...user, hotels: [...(user.hotels || []), newHotel.id] }
+            : user
+        );
+        setHotelUsers(updatedHotelUsers);
+        setCurrentUser({ ...currentUser, hotels: [...(currentUser.hotels || []), newHotel.id] });
+      }
+    } catch (error) {
+      alert('Failed to submit hotel: ' + error.message);
+      return;
     }
 
     setHotelForm({
@@ -4037,6 +4087,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
     setCurrentStep(1);
     setFormErrors({});
+    setTermsAccepted(false);
 
     setShowHotelForm(false);
     
@@ -4047,7 +4098,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
       </svg>
-      <span>Data Submitted for approval</span>
+      <span>Submitted your data for approval</span>
     `;
     document.body.appendChild(successMessage);
     
@@ -4060,27 +4111,36 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   };
 
   // Admin approve hotel
-  const approveHotel = (hotelId) => {
-    const hotelToApprove = pendingHotels.find(hotel => hotel.id === hotelId);
-    if (hotelToApprove) {
-      setHotels(prev => [...prev, { ...hotelToApprove, status: 'approved' }]);
-      setPendingHotels(prev => prev.filter(hotel => hotel.id !== hotelId));
+  const approveHotel = async (hotelId) => {
+    try {
+      await approveHotelFirestore(hotelId);
       alert('Hotel approved successfully!');
+    } catch (error) {
+      alert('Failed to approve hotel: ' + error.message);
     }
   };
 
   // Admin reject hotel
-  const rejectHotel = (hotelId) => {
+  const rejectHotel = async (hotelId) => {
     if (window.confirm('Are you sure you want to reject this hotel submission?')) {
-      setPendingHotels(prev => prev.filter(hotel => hotel.id !== hotelId));
-      alert('Hotel rejected successfully!');
+      try {
+        await rejectHotelFirestore(hotelId);
+        alert('Hotel rejected successfully!');
+      } catch (error) {
+        alert('Failed to reject hotel: ' + error.message);
+      }
     }
   };
 
   // Delete hotel (for admin)
-  const deleteHotel = (hotelId) => {
+  const deleteHotel = async (hotelId) => {
     if (window.confirm('Are you sure you want to delete this hotel?')) {
-      setHotels(prev => prev.filter(hotel => hotel.id !== hotelId));
+      try {
+        await deleteHotelFirestore(hotelId);
+        alert('Hotel deleted successfully!');
+      } catch (error) {
+        alert('Failed to delete hotel: ' + error.message);
+      }
     }
   };
 
@@ -4388,7 +4448,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
   return (
     <motion.div 
-      className="min-h-screen bg-gradient-to-b from-rose-50 to-white custom-scrollbar"
+      className="min-h-screen bg-gradient-to-b from-rose-50 to-white max-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
       initial="hidden"
       animate="visible"
       variants={containerVariants}
@@ -4401,18 +4461,18 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         transition={{ duration: 0.5 }}
       >
         <div className="container mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="flex items-center space-x-2">
               <div className="bg-rose-600 text-white p-2 rounded-lg">
-                <FiHome size={24} />
+                <FiHome size={20} className="sm:w-6 sm:h-6" />
               </div>
-              <h1 className="text-2xl font-bold text-gray-800">KashmirStays</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-800">KashmirStays</h1>
             </div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               {isAuthenticated ? (
-                <div className="flex items-center space-x-4">
-                  <div className="flex items-center space-x-2 bg-rose-50 px-4 py-2 rounded-full">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                  <div className="flex items-center space-x-2 bg-rose-50 px-3 sm:px-4 py-2 rounded-full text-sm sm:text-base">
                     <div className="bg-rose-100 text-rose-600 p-1.5 rounded-full">
                       {userRole === 'admin' ? <FiSettings size={16} /> : <FiBriefcase size={16} />}
                     </div>
@@ -4430,23 +4490,25 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                   {userRole === 'hotel' && (
                     <>
                       <motion.button
-                        className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center space-x-1 sm:space-x-2 transition-colors text-sm sm:text-base"
+                        onClick={() => setShowRegisterModal(true)}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        <FiBriefcase size={16} className="sm:w-[18px] sm:h-[18px]" />
+                        <span className="hidden sm:inline">My Dashboard</span>
+                        <span className="sm:hidden">Dashboard</span>
+                      </motion.button>
+                      
+                      <motion.button
+                        className="bg-rose-600 hover:bg-rose-700 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center space-x-1 sm:space-x-2 transition-colors text-sm sm:text-base"
                         onClick={() => setShowHotelForm(true)}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                       >
-                        <FiPlus size={18} />
-                        <span>Add Property</span>
-                      </motion.button>
-                      
-                      <motion.button
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
-                        onClick={() => setShowHotelPanel(true)}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        <FiBriefcase size={18} />
-                        <span>My Hotels</span>
+                        <FiPlus size={16} className="sm:w-[18px] sm:h-[18px]" />
+                        <span className="hidden sm:inline">Add Property</span>
+                        <span className="sm:hidden">Add</span>
                       </motion.button>
                     </>
                   )}
@@ -4541,7 +4603,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
           variants={itemVariants}
           whileHover={{ y: -5 }}
         >
-          <div className="flex flex-col md:flex-row gap-4 mb-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
             <div className="relative flex-grow">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <FiSearch className="text-rose-400" />
@@ -4549,13 +4611,13 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
               <input
                 type="text"
                 placeholder="Search hotels by name or location..."
-                className="w-full p-3 pl-10 border border-rose-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                className="w-full p-3 pl-10 border border-rose-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent text-sm sm:text-base"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <motion.button 
-              className="flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-6 py-3 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg"
+              className="flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-4 sm:px-6 py-3 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg text-sm sm:text-base whitespace-nowrap"
               onClick={() => setShowFilters(!showFilters)}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -4575,7 +4637,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.3 }}
               >
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
                   <div>
                     <h3 className="font-medium mb-3 text-gray-800 text-lg">Sort By</h3>
                     <select 
@@ -4674,7 +4736,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
         {/* Hotel Listing with Lazy Loading */}
         <motion.div 
-          className="grid grid-cols-1 lg:grid-cols-2 gap-8"
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4 sm:gap-6 lg:gap-8"
           variants={containerVariants}
         >
           <Suspense fallback={<LoadingSpinner />}>
@@ -4742,14 +4804,39 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
           </motion.div>
         )}
 
-        {/* Enhanced Hotel Registration Modal */}
-        <EnhancedHotelRegistration
-          showRegisterModal={showRegisterModal}
-          setShowRegisterModal={setShowRegisterModal}
-          onHotelRegister={handleHotelRegister}
-          switchToLogin={switchToLogin}
-          loading={loading}
+        {/* Hotel Auth Wrapper - Shows Dashboard for logged-in users or Registration for new users */}
+        <HotelAuthWrapper
+          isOpen={showRegisterModal}
+          onClose={() => setShowRegisterModal(false)}
+          currentUser={currentUser}
+          isAuthenticated={isAuthenticated}
+          userRole={userRole}
+          // Registration props
+          onRegistrationSuccess={handleHotelRegister}
+          // Dashboard props
+          userHotels={getCurrentUserHotels()}
+          pendingHotels={getCurrentUserPendingHotels()}
+          onUpdateProfile={async (profileData) => {
+            const updatedUser = { ...currentUser, ...profileData };
+            setCurrentUser(updatedUser);
+            localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+            
+            const updatedHotelUsers = hotelUsers.map(user => 
+              user.id === currentUser.id ? { ...user, ...profileData } : user
+            );
+            setHotelUsers(updatedHotelUsers);
+            localStorage.setItem('kashmirStays_hotelUsers', JSON.stringify(updatedHotelUsers));
+          }}
+          onAddProperty={() => {
+            setShowRegisterModal(false);
+            setShowHotelForm(true);
+          }}
+          onEditProperty={(hotel) => {
+            console.log('Edit property:', hotel);
+          }}
         />
+
+
 
         {/* Enhanced Login Modal */}
         <EnhancedLogin
@@ -4771,7 +4858,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
               exit={{ opacity: 0 }}
             >
               <motion.div 
-                className="bg-white rounded-2xl w-full max-w-6xl max-h-[95vh] overflow-auto shadow-2xl"
+                className="bg-white rounded-2xl w-full max-w-6xl mx-4 max-h-[95vh] overflow-auto shadow-2xl scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
                 variants={modalVariants}
                 initial="hidden"
                 animate="visible"
@@ -4789,6 +4876,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                         setShowHotelForm(false);
                         setCurrentStep(1);
                         setFormErrors({});
+                        setTermsAccepted(false);
                       }}
                       className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
                     >
@@ -4815,7 +4903,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                   </div>
 
                   {/* Form Steps Navigation */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
                     {formSteps.map((step) => (
                       <FormStep
                         key={step.number}
@@ -5236,10 +5324,140 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       </motion.div>
                     )}
 
-                  
-
-                    {/* Step 4: Policies & Contact */}
+                    {/* Step 4: Rate Management */}
                     {currentStep === 4 && (
+                      <motion.div 
+                        className="bg-gradient-to-r from-purple-50 to-violet-50 p-8 rounded-2xl border border-purple-100"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.5 }}
+                      >
+                        <div className="flex items-center space-x-3 mb-8">
+                          <div className="bg-purple-100 text-purple-600 p-3 rounded-xl">
+                            <FiDollarSign size={28} />
+                          </div>
+                          <div>
+                            <h3 className="text-2xl font-bold text-gray-800">Rate Management</h3>
+                            <p className="text-gray-600">Configure seasonal rates and blackout dates</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                          <p className="text-sm text-blue-800">
+                            <FiDollarSign className="inline mr-2" />
+                            Set seasonal pricing and manage blackout periods for your hotel
+                          </p>
+                        </div>
+
+                        {/* Import and use HotelRateManagement component */}
+                        <div className="bg-white rounded-xl border border-gray-200 p-6">
+                          <div className="space-y-6">
+                            {/* Seasonal Rates Section */}
+                            <div>
+                              <h4 className="text-lg font-semibold text-gray-800 mb-4">Seasonal Rates</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Season Type</label>
+                                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                    <option value="">Select Season</option>
+                                    <option value="peak">Peak Season</option>
+                                    <option value="high">High Season</option>
+                                    <option value="regular">Regular Season</option>
+                                    <option value="low">Low Season</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Rate (₹/night)</label>
+                                  <input
+                                    type="number"
+                                    placeholder="5000"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                                  <input
+                                    type="date"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                                  <input
+                                    type="date"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                  />
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                              >
+                                <FiPlus size={16} />
+                                <span>Add Seasonal Rate</span>
+                              </button>
+                            </div>
+
+                            {/* Blackout Dates Section */}
+                            <div className="border-t border-gray-200 pt-6">
+                              <h4 className="text-lg font-semibold text-gray-800 mb-4">Blackout Dates</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                                  <input
+                                    type="date"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                                  <input
+                                    type="date"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Reason</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Maintenance, Private event"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                  />
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+                              >
+                                <FiPlus size={16} />
+                                <span>Add Blackout Period</span>
+                              </button>
+                            </div>
+
+                            {/* Info Box */}
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                              <div className="flex items-start space-x-2">
+                                <FiAlertCircle className="text-blue-600 mt-0.5" size={16} />
+                                <div className="text-sm text-blue-800">
+                                  <p className="font-medium mb-1">Rate Management Tips:</p>
+                                  <ul className="space-y-1 text-xs">
+                                    <li>• Seasonal rates help maximize revenue during peak periods</li>
+                                    <li>• Weekend rates typically 20-30% higher than weekday rates</li>
+                                    <li>• Blackout dates prevent bookings during maintenance or private events</li>
+                                    <li>• Ensure rate periods don't overlap to avoid conflicts</li>
+                                  </ul>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 5: Policies & Contact */}
+                    {currentStep === 5 && (
                       <motion.div 
                         className="bg-gradient-to-r from-purple-50 to-violet-50 p-8 rounded-2xl border border-purple-100"
                         initial={{ opacity: 0, x: 20 }}
@@ -5333,8 +5551,8 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       </motion.div>
                     )}
 
-                    {/* Step 5: Additional Details */}
-                    {currentStep === 5 && (
+                    {/* Step 6: Additional Details */}
+                    {currentStep === 6 && (
                       <motion.div 
                         className="bg-gradient-to-r from-amber-50 to-orange-50 p-8 rounded-2xl border border-amber-100"
                         initial={{ opacity: 0, x: -20 }}
@@ -5435,6 +5653,198 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       </motion.div>
                     )}
 
+                    {/* Step 6: Review & Submit - ENHANCED */}
+                    {currentStep === 6 && (
+                      <motion.div 
+                        className="bg-gradient-to-r from-indigo-50 to-purple-50 p-8 rounded-2xl border border-indigo-100"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.5 }}
+                      >
+                        <div className="flex items-center space-x-3 mb-8">
+                          <div className="bg-indigo-100 text-indigo-600 p-3 rounded-xl">
+                            <FiCheckCircle size={28} />
+                          </div>
+                          <div>
+                            <h3 className="text-2xl font-bold text-gray-800">Review & Submit</h3>
+                            <p className="text-gray-600">Final review and submission for approval</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-8">
+                          {/* Success Celebration */}
+                          <motion.div 
+                            className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-8 text-center"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.2 }}
+                          >
+                            <div className="bg-green-100 text-green-600 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                              <FiAward size={32} />
+                            </div>
+                            <h3 className="text-2xl font-bold text-gray-800 mb-3">You're Almost There! 🎉</h3>
+                            <p className="text-gray-600 mb-4">
+                              Congratulations on completing your hotel profile! Your property is ready to be submitted for review.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                              <div className="bg-white p-4 rounded-xl border border-green-200">
+                                <FiClock className="text-green-600 mx-auto mb-2" size={24} />
+                                <p className="text-sm text-gray-700">24-48 Hour Review</p>
+                              </div>
+                              <div className="bg-white p-4 rounded-xl border border-green-200">
+                                <FiCheckCircle className="text-green-600 mx-auto mb-2" size={24} />
+                                <p className="text-sm text-gray-700">Quality Check</p>
+                              </div>
+                              <div className="bg-white p-4 rounded-xl border border-green-200">
+                                <FiTrendingUp className="text-green-600 mx-auto mb-2" size={24} />
+                                <p className="text-sm text-gray-700">Go Live</p>
+                              </div>
+                            </div>
+                          </motion.div>
+
+                          {/* Property Summary */}
+                          <div className="bg-white rounded-xl border border-gray-200 p-6">
+                            <h4 className="text-xl font-bold text-gray-800 mb-4">Property Summary</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div>
+                                <h5 className="font-semibold text-gray-700 mb-3">Basic Information</h5>
+                                <div className="space-y-2 text-sm">
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Hotel Name:</span>
+                                    <span className="font-medium">{hotelForm.name}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Location:</span>
+                                    <span className="font-medium">{hotelForm.location}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Star Rating:</span>
+                                    <span className="font-medium">{hotelForm.stars} Stars</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Starting Price:</span>
+                                    <span className="font-medium">₹{hotelForm.price.toLocaleString()}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div>
+                                <h5 className="font-semibold text-gray-700 mb-3">Property Details</h5>
+                                <div className="space-y-2 text-sm">
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Amenities:</span>
+                                    <span className="font-medium">{hotelForm.amenities.length} selected</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Room Types:</span>
+                                    <span className="font-medium">{hotelForm.rooms.length} configured</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Contact:</span>
+                                    <span className="font-medium">{hotelForm.contact.phone}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Status:</span>
+                                    <span className="font-medium text-amber-600">Pending Approval</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Terms and Conditions */}
+                          <div className="bg-white rounded-xl border border-gray-200 p-6">
+                            <h4 className="text-xl font-bold text-gray-800 mb-4">Terms & Conditions</h4>
+                            
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+                              <h5 className="font-semibold text-blue-800 mb-3 flex items-center">
+                                <FiInfo className="mr-2" />
+                                Important Information
+                              </h5>
+                              <ul className="text-blue-700 text-sm space-y-2">
+                                <li className="flex items-start">
+                                  <FiCheck className="mr-2 mt-1 flex-shrink-0" />
+                                  <span>Your property will be reviewed within 24-48 hours</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <FiCheck className="mr-2 mt-1 flex-shrink-0" />
+                                  <span>You must maintain accurate availability and pricing</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <FiCheck className="mr-2 mt-1 flex-shrink-0" />
+                                  <span>Quality standards must be maintained as per your listing</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <FiCheck className="mr-2 mt-1 flex-shrink-0" />
+                                  <span>Commission of 15% applies on all bookings</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <FiCheck className="mr-2 mt-1 flex-shrink-0" />
+                                  <span>You're responsible for guest experience and service quality</span>
+                                </li>
+                              </ul>
+                            </div>
+
+                            {formErrors.terms && (
+                              <motion.div 
+                                className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4"
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                              >
+                                <div className="flex items-center space-x-2 text-red-700">
+                                  <FiAlertCircle size={16} />
+                                  <span className="text-sm font-medium">{formErrors.terms}</span>
+                                </div>
+                              </motion.div>
+                            )}
+
+                            <motion.label 
+                              className={`flex items-start space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
+                                termsAccepted
+                                  ? 'bg-green-50 border-green-300 shadow-md'
+                                  : 'bg-gray-50 border-gray-200 hover:border-green-300'
+                              }`}
+                              whileHover={{ scale: 1.01 }}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-1 h-5 w-5 text-green-600 rounded focus:ring-green-500 border-gray-300"
+                                checked={termsAccepted}
+                                onChange={() => setTermsAccepted(!termsAccepted)}
+                              />
+                              <div className="flex-1">
+                                <span className="font-medium text-gray-800">
+                                  I agree to the KashmirStays Hotel Partner Agreement
+                                </span>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  By checking this box, I confirm that all information provided is accurate and 
+                                  I agree to comply with KashmirStays' terms of service, commission structure, 
+                                  and quality standards. I understand that my property will undergo review before 
+                                  being published on the platform.
+                                </p>
+                              </div>
+                            </motion.label>
+                          </div>
+
+                          {/* Final Call to Action */}
+                          <motion.div 
+                            className="bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200 rounded-2xl p-6 text-center"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.4 }}
+                          >
+                            <h4 className="text-xl font-bold text-gray-800 mb-2">Ready to Join KashmirStays?</h4>
+                            <p className="text-gray-600 mb-4">
+                              Submit your property now and start welcoming guests from around the world!
+                            </p>
+                            <div className="flex items-center justify-center space-x-2 text-rose-600">
+                              <FiCheckCircle size={20} />
+                              <span className="font-medium">Your property will be live after admin approval</span>
+                            </div>
+                          </motion.div>
+                        </div>
+                      </motion.div>
+                    )}
+
                     {/* Navigation Buttons */}
                     <motion.div
                       className="flex justify-between items-center pt-8 border-t border-gray-200"
@@ -5472,9 +5882,10 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       ) : (
                         <motion.button
                           type="submit"
-                          className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center space-x-2"
-                          whileHover={{ scale: 1.05, y: -2 }}
-                          whileTap={{ scale: 0.95 }}
+                          disabled={!termsAccepted}
+                          className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          whileHover={termsAccepted ? { scale: 1.05, y: -2 } : {}}
+                          whileTap={termsAccepted ? { scale: 0.95 } : {}}
                         >
                           <FiSave size={20} />
                           <span>Submit for Approval</span>
@@ -5482,13 +5893,6 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       )}
                     </motion.div>
                   </form>
-
-                  {/* Pending Approval Modal */}
-                  <PendingApprovalModal
-                    open={pendingModalOpen}
-                    email={pendingEmail}
-                    onClose={() => setPendingModalOpen(false)}
-                  />
                 </div>
               </motion.div>
             </motion.div>
