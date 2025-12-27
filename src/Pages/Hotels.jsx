@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { 
-  FiStar, FiFilter, FiChevronDown, FiX, FiMapPin, 
-  FiWifi, FiCoffee, FiDroplet, FiHeart, FiClock, 
+import {
+  FiStar, FiFilter, FiChevronDown, FiX, FiMapPin,
+  FiWifi, FiCoffee, FiDroplet, FiHeart, FiClock,
   FiUsers, FiCalendar, FiZap, FiEdit, FiSave, FiMail,
   FiCreditCard, FiPhone, FiLock, FiUser, FiSearch,
   FiCheck, FiDollarSign, FiHome, FiUmbrella, FiTv,
@@ -19,21 +19,10 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import emailjs from '@emailjs/browser';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-  signOut,
-  onAuthStateChanged,
-  GoogleAuthProvider,
-  sendEmailVerification,
-  updateProfile
-} from 'firebase/auth';
-import { auth, googleProvider } from '../firebase';
+// API-based authentication (replaces Firebase)
+import { authAPI } from '../services/api.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 import useHotelStorage from '../hooks/useHotelStorage';
-import { migrateLocalStorageToFirebase } from '../utils/migrateToFirebase';
 import HotelDashboard from '../Components/Hotels/auth/HotelDashboard';
 import HotelAuthWrapper from '../Components/Hotels/auth/HotelAuthWrapper';
 
@@ -165,7 +154,7 @@ const validationRules = {
     }
     return '';
   },
-  
+
   gstNumber: (value) => {
     const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
     if (!gstRegex.test(value)) {
@@ -173,7 +162,7 @@ const validationRules = {
     }
     return '';
   },
-  
+
   phone: (value) => {
     const phoneRegex = /^[6-9]\d{9}$/;
     if (!phoneRegex.test(value.replace(/\D/g, ''))) {
@@ -181,7 +170,7 @@ const validationRules = {
     }
     return '';
   },
-  
+
   email: (value) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(value)) {
@@ -189,7 +178,7 @@ const validationRules = {
     }
     return '';
   },
-  
+
   pincode: (value) => {
     const pincodeRegex = /^\d{6}$/;
     if (!pincodeRegex.test(value)) {
@@ -197,7 +186,7 @@ const validationRules = {
     }
     return '';
   },
-  
+
   hotelName: (value) => {
     if (value.length < 3) {
       return 'Hotel name must be at least 3 characters long';
@@ -207,7 +196,7 @@ const validationRules = {
     }
     return '';
   },
-  
+
   price: (value) => {
     const numValue = parseInt(value);
     if (isNaN(numValue) || numValue < 500) {
@@ -221,25 +210,25 @@ const validationRules = {
 };
 
 // Enhanced Input Field Component with Validation
-const EnhancedInput = ({ 
-  label, 
-  value, 
-  onChange, 
-  type = 'text', 
-  placeholder, 
+const EnhancedInput = ({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  placeholder,
   required = false,
   icon: Icon,
   error,
   description,
   validationRule,
-  ...props 
+  ...props
 }) => {
   const [localError, setLocalError] = useState('');
 
   const handleChange = (e) => {
     const newValue = e.target.value;
     onChange(e);
-    
+
     // Validate on change
     if (validationRule && required && newValue) {
       const validationError = validationRule(newValue);
@@ -283,18 +272,16 @@ const EnhancedInput = ({
           onChange={handleChange}
           onBlur={handleBlur}
           placeholder={placeholder}
-          className={`w-full p-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 ${
-            Icon ? 'pl-10' : 'pl-3'
-          } ${
-            displayError 
-              ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-200' 
+          className={`w-full p-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 ${Icon ? 'pl-10' : 'pl-3'
+            } ${displayError
+              ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-200'
               : 'border-gray-200 bg-white focus:border-rose-500 focus:ring-rose-200'
-          }`}
+            }`}
           {...props}
         />
       </div>
       {displayError && (
-        <motion.p 
+        <motion.p
           className="text-red-600 text-sm flex items-center space-x-1"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -308,10 +295,10 @@ const EnhancedInput = ({
 };
 
 // Enhanced Document Upload Component with Validation - WEBP Only
-const DocumentUpload = ({ 
-  label, 
-  onDocumentChange, 
-  onDocumentRemove, 
+const DocumentUpload = ({
+  label,
+  onDocumentChange,
+  onDocumentRemove,
   document: doc,
   required = false,
   description,
@@ -392,7 +379,7 @@ const DocumentUpload = ({
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const file = e.dataTransfer.files[0];
     if (!file) return;
 
@@ -478,13 +465,12 @@ const DocumentUpload = ({
         </div>
       ) : (
         <div
-          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 cursor-pointer ${
-            isDragging 
-              ? 'border-rose-400 bg-rose-50' 
-              : error 
-              ? 'border-red-300 bg-red-50' 
+          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 cursor-pointer ${isDragging
+            ? 'border-rose-400 bg-rose-50'
+            : error
+              ? 'border-red-300 bg-red-50'
               : 'border-gray-300 bg-gray-50 hover:border-rose-400 hover:bg-rose-50'
-          }`}
+            }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -498,9 +484,8 @@ const DocumentUpload = ({
             onChange={handleFileChange}
           />
           <div className="space-y-3">
-            <div className={`p-3 rounded-full inline-flex ${
-              error ? 'bg-red-100 text-red-600' : 'bg-rose-100 text-rose-600'
-            }`}>
+            <div className={`p-3 rounded-full inline-flex ${error ? 'bg-red-100 text-red-600' : 'bg-rose-100 text-rose-600'
+              }`}>
               <FiUpload size={24} />
             </div>
             <div>
@@ -530,7 +515,7 @@ const DocumentUpload = ({
       )}
 
       {error && (
-        <motion.div 
+        <motion.div
           className="flex items-center space-x-2 text-red-600 bg-red-50 p-3 rounded-lg border border-red-200"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -557,7 +542,7 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
 
   const handleReviewSubmit = (e) => {
     e.preventDefault();
-    
+
     const newReview = {
       id: Date.now(),
       user: currentUser?.name || 'Anonymous',
@@ -574,7 +559,7 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
     const updatedReviews = [newReview, ...reviews];
     setReviews(updatedReviews);
     onReviewSubmit?.(updatedReviews);
-    
+
     setReviewForm({
       rating: 5,
       title: '',
@@ -586,8 +571,8 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
   };
 
   const markHelpful = (reviewId) => {
-    setReviews(prev => prev.map(review => 
-      review.id === reviewId 
+    setReviews(prev => prev.map(review =>
+      review.id === reviewId
         ? { ...review, helpful: (review.helpful || 0) + 1 }
         : review
     ));
@@ -625,7 +610,7 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
             </div>
           </div>
         </div>
-        
+
         {currentUser && (
           <motion.button
             onClick={() => setShowReviewForm(true)}
@@ -647,10 +632,10 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
             <div key={rating} className="flex items-center space-x-3">
               <span className="text-sm font-medium text-gray-600 w-8">{rating} star</span>
               <div className="flex-1 bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-amber-500 h-2 rounded-full" 
-                  style={{ 
-                    width: `${reviews.length > 0 ? (ratingDistribution[rating] / reviews.length) * 100 : 0}%` 
+                <div
+                  className="bg-amber-500 h-2 rounded-full"
+                  style={{
+                    width: `${reviews.length > 0 ? (ratingDistribution[rating] / reviews.length) * 100 : 0}%`
                   }}
                 />
               </div>
@@ -665,13 +650,13 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
       {/* Review Form Modal */}
       <AnimatePresence>
         {showReviewForm && (
-          <motion.div 
+          <motion.div
             className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <motion.div 
+            <motion.div
               className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl"
               variants={modalVariants}
               initial="hidden"
@@ -681,7 +666,7 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
               <div className="p-6">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-xl font-bold text-gray-800">Write a Review</h3>
-                  <button 
+                  <button
                     onClick={() => setShowReviewForm(false)}
                     className="text-gray-400 hover:text-gray-600 transition-colors"
                   >
@@ -701,11 +686,10 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
                           key={star}
                           type="button"
                           onClick={() => setReviewForm(prev => ({ ...prev, rating: star }))}
-                          className={`text-2xl ${
-                            star <= reviewForm.rating 
-                              ? 'text-amber-500 fill-current' 
-                              : 'text-gray-300'
-                          }`}
+                          className={`text-2xl ${star <= reviewForm.rating
+                            ? 'text-amber-500 fill-current'
+                            : 'text-gray-300'
+                            }`}
                           whileHover={{ scale: 1.2 }}
                           whileTap={{ scale: 0.9 }}
                         >
@@ -814,7 +798,7 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
           </div>
         ) : (
           reviews.map(review => (
-            <motion.div 
+            <motion.div
               key={review.id}
               className="bg-white border border-gray-200 rounded-xl p-6"
               initial={{ opacity: 0, y: 20 }}
@@ -826,7 +810,7 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
                   <div className="flex items-center space-x-2 mt-1">
                     <div className="flex items-center space-x-1">
                       {[...Array(5)].map((_, i) => (
-                        <FiStar 
+                        <FiStar
                           key={i}
                           size={16}
                           className={i < review.rating ? 'text-amber-500 fill-current' : 'text-gray-300'}
@@ -862,7 +846,7 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
                   </span>
                   <span>Stayed: {new Date(review.stayDate).toLocaleDateString()}</span>
                 </div>
-                
+
                 <motion.button
                   onClick={() => markHelpful(review.id)}
                   className="flex items-center space-x-2 text-gray-500 hover:text-rose-600 transition-colors"
@@ -882,9 +866,9 @@ const ReviewSystem = ({ hotel, onReviewSubmit, currentUser }) => {
 };
 
 // Enhanced Hotel Registration with Document Upload
-const EnhancedHotelRegistration = ({ 
-  showRegisterModal, 
-  setShowRegisterModal, 
+const EnhancedHotelRegistration = ({
+  showRegisterModal,
+  setShowRegisterModal,
   onHotelRegister,
   switchToLogin,
   loading = false
@@ -919,7 +903,7 @@ const EnhancedHotelRegistration = ({
       ...prev,
       [name]: value
     }));
-    
+
     // Clear error when user starts typing
     if (formErrors[name]) {
       setFormErrors(prev => ({ ...prev, [name]: '' }));
@@ -1026,7 +1010,7 @@ const EnhancedHotelRegistration = ({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       alert('Please fix the errors in the form before submitting.');
       return;
@@ -1042,13 +1026,13 @@ const EnhancedHotelRegistration = ({
   return (
     <AnimatePresence>
       {showRegisterModal && (
-        <motion.div 
+        <motion.div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <motion.div 
+          <motion.div
             className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-auto shadow-2xl"
             variants={modalVariants}
             initial="hidden"
@@ -1058,7 +1042,7 @@ const EnhancedHotelRegistration = ({
             <div className="p-8">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">Hotel Registration</h2>
-                <button 
+                <button
                   onClick={() => setShowRegisterModal(false)}
                   className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
                 >
@@ -1175,7 +1159,7 @@ const EnhancedHotelRegistration = ({
                     <FiFileText className="mr-2 text-green-600" />
                     Business Documents
                   </h3>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <EnhancedInput
                       label="PAN Number"
@@ -1346,10 +1330,10 @@ const EnhancedHotelRegistration = ({
   );
 };
 
-// Enhanced Login Component with Firebase
-const EnhancedLogin = ({ 
-  showLoginModal, 
-  setShowLoginModal, 
+// Enhanced Login Component for Hotel Partners
+const EnhancedLogin = ({
+  showLoginModal,
+  setShowLoginModal,
   onLogin,
   onGoogleLogin,
   switchToRegister,
@@ -1386,7 +1370,7 @@ const EnhancedLogin = ({
       ...prev,
       [name]: value
     }));
-    
+
     if (formErrors[name]) {
       setFormErrors(prev => ({ ...prev, [name]: '' }));
     }
@@ -1413,7 +1397,7 @@ const EnhancedLogin = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (isLocked) {
       alert(`Account temporarily locked. Please try again in ${lockTime} seconds.`);
       return;
@@ -1425,11 +1409,11 @@ const EnhancedLogin = ({
 
     try {
       const success = await onLogin(loginForm);
-      
+
       if (!success) {
         const newAttempts = loginAttempts + 1;
         setLoginAttempts(newAttempts);
-        
+
         if (newAttempts >= 3) {
           setIsLocked(true);
           setLockTime(300); // 5 minutes lock
@@ -1450,13 +1434,13 @@ const EnhancedLogin = ({
   return (
     <AnimatePresence>
       {showLoginModal && (
-        <motion.div 
+        <motion.div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4 backdrop-blur-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <motion.div 
+          <motion.div
             className="bg-white rounded-2xl w-full max-w-md mx-4 shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
             variants={modalVariants}
             initial="hidden"
@@ -1468,7 +1452,7 @@ const EnhancedLogin = ({
                 <h2 className="text-2xl font-bold text-gray-800">
                   {isLocked ? 'Account Locked' : 'Login to KashmirStays'}
                 </h2>
-                <button 
+                <button
                   onClick={() => setShowLoginModal(false)}
                   className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
                 >
@@ -1493,7 +1477,7 @@ const EnhancedLogin = ({
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {authError && (
-                    <motion.div 
+                    <motion.div
                       className="bg-red-50 border border-red-200 rounded-lg p-3"
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -1530,18 +1514,7 @@ const EnhancedLogin = ({
                     error={formErrors.password}
                   />
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Login As</label>
-                    <select
-                      name="role"
-                      className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all"
-                      value={loginForm.role}
-                      onChange={handleLoginChange}
-                    >
-                      <option value="hotel">Hotel</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
+                  {/* Role selector removed - only hotel users login here. Admins use admin.traveligo.in */}
 
                   <div className="flex items-center justify-between">
                     <label className="flex items-center space-x-2">
@@ -1553,7 +1526,7 @@ const EnhancedLogin = ({
                       />
                       <span className="text-sm text-gray-700">Show password</span>
                     </label>
-                    
+
                     <button
                       type="button"
                       className="text-sm text-rose-600 hover:text-rose-700 transition-colors"
@@ -1587,39 +1560,7 @@ const EnhancedLogin = ({
 
 
 
-                  {loginForm.role === 'hotel' && (
-                    <>
-                      <div className="relative my-6">
-                        <div className="absolute inset-0 flex items-center">
-                          <div className="w-full border-t border-gray-300"></div>
-                        </div>
-                        <div className="relative flex justify-center text-sm">
-                          <span className="px-2 bg-white text-gray-500">Or continue with</span>
-                        </div>
-                      </div>
-
-                      <motion.button
-                        type="button"
-                        onClick={onGoogleLogin}
-                        disabled={loading}
-                        className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 py-3.5 rounded-lg font-medium transition-all duration-300 shadow-md hover:shadow-lg flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                        whileHover={{ scale: loading ? 1 : 1.02 }}
-                        whileTap={{ scale: loading ? 1 : 0.98 }}
-                      >
-                        {loading ? (
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
-                        ) : (
-                          <svg className="w-5 h-5" viewBox="0 0 24 24">
-                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                          </svg>
-                        )}
-                        <span>{loading ? 'Signing in...' : 'Sign in with Google'}</span>
-                      </motion.button>
-                    </>
-                  )}
+                  {/* Google Sign-In removed - using email/password only */}
 
                   <div className="text-center mt-6">
                     <p className="text-gray-600">
@@ -1639,7 +1580,7 @@ const EnhancedLogin = ({
               )}
             </div>
           </motion.div>
-        </motion.div>  
+        </motion.div>
       )}
     </AnimatePresence>
   );
@@ -1698,7 +1639,7 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
       const defaultData = {};
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       for (let i = 0; i < 365; i++) {
         const date = new Date(today);
         date.setDate(today.getDate() + i);
@@ -1715,7 +1656,7 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
         };
       }
       setAvailabilityData(defaultData);
-      
+
       if (onAvailabilityUpdate) {
         onAvailabilityUpdate(defaultData);
       }
@@ -1728,24 +1669,24 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
-    
+
     const days = [];
     const startingDay = firstDay.getDay();
-    
+
     for (let i = 0; i < startingDay; i++) {
       days.push(null);
     }
-    
+
     for (let i = 1; i <= daysInMonth; i++) {
       days.push(new Date(year, month, i));
     }
-    
+
     return days;
   };
 
   const updateAvailability = (date, field, value) => {
     if (!isEditable) return;
-    
+
     const dateString = date.toISOString().split('T')[0];
     const updatedData = {
       ...availabilityData,
@@ -1754,9 +1695,9 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
         [field]: value
       }
     };
-    
+
     setAvailabilityData(updatedData);
-    
+
     if (onAvailabilityUpdate) {
       onAvailabilityUpdate(updatedData);
     }
@@ -1765,11 +1706,11 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
   const handleDateClick = (date, event) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     if (date < today) return;
-    
+
     setSelectedDate(date);
-    
+
     if (isEditable) {
       const rect = event.target.getBoundingClientRect();
       setPopupPosition({
@@ -1789,19 +1730,19 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
 
   const getDayClass = (date) => {
     if (!date) return '';
-    
+
     const dateString = date.toISOString().split('T')[0];
     const dayData = availabilityData[dateString];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     let classes = 'w-10 h-10 rounded-lg flex items-center justify-center text-sm font-medium transition-all duration-200 ';
-    
+
     if (date < today) {
       classes += 'bg-gray-100 text-gray-400 cursor-not-allowed ';
     } else if (dayData) {
       const availableRooms = dayData.totalRooms - dayData.bookedRooms - (dayData.blockedRooms || 0);
-      
+
       if (dayData.status === 'blocked') {
         classes += 'bg-orange-500 text-white hover:bg-orange-600 ';
       } else if (dayData.status === 'booked' || availableRooms === 0) {
@@ -1811,41 +1752,41 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
       } else {
         classes += 'bg-gray-200 text-gray-600 hover:bg-gray-300 ';
       }
-      
+
       if (selectedDate && date.toDateString() === selectedDate.toDateString()) {
         classes += 'ring-2 ring-blue-500 ring-offset-2 shadow-lg transform scale-105 ';
       }
     } else {
       classes += 'bg-gray-200 text-gray-600 hover:bg-gray-300 ';
     }
-    
+
     if (isEditable && date >= today) {
       classes += 'cursor-pointer hover:shadow-md ';
     } else if (date >= today) {
       classes += 'cursor-pointer hover:shadow-md ';
     }
-    
+
     return classes;
   };
 
   const getDayTooltip = (date) => {
     if (!date) return '';
-    
+
     const dateString = date.toISOString().split('T')[0];
     const dayData = availabilityData[dateString];
-    
+
     if (!dayData) return 'No data available';
-    
+
     const availableRooms = dayData.totalRooms - dayData.bookedRooms;
-    
+
     if (!dayData.available) {
       return 'Not available for booking';
     }
-    
+
     if (availableRooms === 0) {
       return 'All rooms booked';
     }
-    
+
     return `${availableRooms} rooms available - ₹${dayData.price || 0}`;
   };
 
@@ -1916,7 +1857,7 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
               <motion.button
                 onClick={(e) => handleDateClick(date, e)}
                 className={getDayClass(date)}
-                disabled={date < new Date().setHours(0,0,0,0)}
+                disabled={date < new Date().setHours(0, 0, 0, 0)}
                 title={getDayTooltip(date)}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -1932,14 +1873,14 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
 
       <AnimatePresence>
         {showDatePopup && selectedDate && (
-          <motion.div 
+          <motion.div
             className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setShowDatePopup(false)}
           >
-            <motion.div 
+            <motion.div
               className="bg-white rounded-xl shadow-2xl border border-gray-200 p-6 max-w-sm mx-4"
               initial={{ opacity: 0, scale: 0.8, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1954,14 +1895,14 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
             >
               <div className="flex justify-between items-center mb-4">
                 <h4 className="font-semibold text-gray-800">
-                  {selectedDate.toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
+                  {selectedDate.toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
                   })}
                 </h4>
-                <button 
+                <button
                   onClick={() => setShowDatePopup(false)}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
@@ -1984,24 +1925,22 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
 
                 return (
                   <div className="space-y-4">
-                    <div className={`p-3 rounded-lg ${
-                      dayData.status === 'blocked'
-                        ? 'bg-orange-50 border border-orange-200'
-                        : dayData.status === 'booked' || availableRooms === 0
-                        ? 'bg-red-50 border border-red-200' 
+                    <div className={`p-3 rounded-lg ${dayData.status === 'blocked'
+                      ? 'bg-orange-50 border border-orange-200'
+                      : dayData.status === 'booked' || availableRooms === 0
+                        ? 'bg-red-50 border border-red-200'
                         : 'bg-green-50 border border-green-200'
-                    }`}>
+                      }`}>
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-gray-700">Status:</span>
-                        <span className={`font-bold capitalize ${
-                          dayData.status === 'blocked'
-                            ? 'text-orange-600'
-                            : dayData.status === 'booked' || availableRooms === 0
+                        <span className={`font-bold capitalize ${dayData.status === 'blocked'
+                          ? 'text-orange-600'
+                          : dayData.status === 'booked' || availableRooms === 0
                             ? 'text-red-600'
                             : 'text-green-600'
-                        }`}>
-                          {dayData.status === 'blocked' ? 'Blocked' : 
-                           dayData.status === 'booked' || availableRooms === 0 ? 'Booked' : 'Available'}
+                          }`}>
+                          {dayData.status === 'blocked' ? 'Blocked' :
+                            dayData.status === 'booked' || availableRooms === 0 ? 'Booked' : 'Available'}
                         </span>
                       </div>
                     </div>
@@ -2109,7 +2048,7 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
                             />
                           </div>
                         </div>
-                        
+
                         <div className="grid grid-cols-3 gap-3">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Total</label>
@@ -2142,7 +2081,7 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
                             />
                           </div>
                         </div>
-                        
+
                         <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
                           <div className="flex justify-between items-center mb-2">
                             <h5 className="font-semibold text-blue-900">Client Names ({(dayData.clients || []).length})</h5>
@@ -2157,7 +2096,7 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
                               + Add
                             </button>
                           </div>
-                          
+
                           {(dayData.clients || []).map((client, idx) => (
                             <div key={idx} className="flex gap-2 mb-2">
                               <input
@@ -2196,7 +2135,7 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
       </AnimatePresence>
 
       {isEditable && (
-        <motion.div 
+        <motion.div
           className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -2229,7 +2168,7 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
               <FiCheckCircle size={16} />
               <span>Open Next 30 Days</span>
             </motion.button>
-            
+
             <motion.button
               onClick={() => {
                 const today = new Date();
@@ -2254,7 +2193,7 @@ const AvailabilityCalendar = ({ room, onAvailabilityUpdate, isEditable = false }
               <FiX size={16} />
               <span>Block Next 7 Days</span>
             </motion.button>
-            
+
             <motion.button
               onClick={() => {
                 const today = new Date();
@@ -2299,7 +2238,7 @@ const BulkAvailabilityEditor = ({ room, onBulkUpdate }) => {
   const handleBulkUpdate = () => {
     const updates = {};
     const currentDate = new Date(startDate);
-    
+
     while (currentDate <= endDate) {
       const dateString = currentDate.toISOString().split('T')[0];
       updates[dateString] = {
@@ -2310,7 +2249,7 @@ const BulkAvailabilityEditor = ({ room, onBulkUpdate }) => {
       };
       currentDate.setDate(currentDate.getDate() + 1);
     }
-    
+
     onBulkUpdate(updates);
   };
 
@@ -2378,31 +2317,28 @@ const BulkAvailabilityEditor = ({ room, onBulkUpdate }) => {
 
 // Form Step Component
 const FormStep = ({ number, title, description, isActive, isCompleted, onClick }) => (
-  <motion.div 
-    className={`flex items-center space-x-4 p-4 rounded-xl cursor-pointer transition-all duration-300 ${
-      isActive 
-        ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg' 
-        : isCompleted
+  <motion.div
+    className={`flex items-center space-x-4 p-4 rounded-xl cursor-pointer transition-all duration-300 ${isActive
+      ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg'
+      : isCompleted
         ? 'bg-green-50 border border-green-200 text-green-700'
         : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'
-    }`}
+      }`}
     onClick={onClick}
     whileHover={{ scale: 1.02 }}
     whileTap={{ scale: 0.98 }}
   >
-    <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-      isActive 
-        ? 'bg-white text-rose-600' 
-        : isCompleted
+    <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${isActive
+      ? 'bg-white text-rose-600'
+      : isCompleted
         ? 'bg-green-500 text-white'
         : 'bg-gray-300 text-gray-600'
-    }`}>
+      }`}>
       {isCompleted ? <FiCheck size={20} /> : number}
     </div>
     <div className="flex-1">
-      <h3 className={`font-bold text-lg ${
-        isActive ? 'text-white' : isCompleted ? 'text-green-800' : 'text-gray-800'
-      }`}>
+      <h3 className={`font-bold text-lg ${isActive ? 'text-white' : isCompleted ? 'text-green-800' : 'text-gray-800'
+        }`}>
         {title}
       </h3>
       <p className={`text-sm ${isActive ? 'text-rose-100' : isCompleted ? 'text-green-600' : 'text-gray-500'}`}>
@@ -2416,11 +2352,11 @@ const FormStep = ({ number, title, description, isActive, isCompleted, onClick }
 );
 
 // WEBP Only Image Upload Component with Validation
-const ImageUploadWithPreview = ({ 
-  image, 
-  onImageChange, 
-  onImageRemove, 
-  title, 
+const ImageUploadWithPreview = ({
+  image,
+  onImageChange,
+  onImageRemove,
+  title,
   description,
   required = false,
   aspectRatio = "16/9"
@@ -2480,7 +2416,7 @@ const ImageUploadWithPreview = ({
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const file = e.dataTransfer.files[0];
     if (!file) return;
 
@@ -2517,13 +2453,13 @@ const ImageUploadWithPreview = ({
 
       {image ? (
         <div className="relative group">
-          <div 
+          <div
             className="rounded-xl overflow-hidden border-2 border-green-200 bg-green-50"
             style={{ aspectRatio }}
           >
-            <img 
-              src={image} 
-              alt="Preview" 
+            <img
+              src={image}
+              alt="Preview"
               className="w-full h-full object-cover"
             />
           </div>
@@ -2556,13 +2492,12 @@ const ImageUploadWithPreview = ({
         </div>
       ) : (
         <div
-          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 cursor-pointer ${
-            isDragging 
-              ? 'border-rose-400 bg-rose-50' 
-              : error 
-              ? 'border-red-300 bg-red-50' 
+          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 cursor-pointer ${isDragging
+            ? 'border-rose-400 bg-rose-50'
+            : error
+              ? 'border-red-300 bg-red-50'
               : 'border-gray-300 bg-gray-50 hover:border-rose-400 hover:bg-rose-50'
-          }`}
+            }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -2576,9 +2511,8 @@ const ImageUploadWithPreview = ({
             onChange={handleFileChange}
           />
           <div className="space-y-3">
-            <div className={`p-3 rounded-full inline-flex ${
-              error ? 'bg-red-100 text-red-600' : 'bg-rose-100 text-rose-600'
-            }`}>
+            <div className={`p-3 rounded-full inline-flex ${error ? 'bg-red-100 text-red-600' : 'bg-rose-100 text-rose-600'
+              }`}>
               <FiUpload size={24} />
             </div>
             <div>
@@ -2608,7 +2542,7 @@ const ImageUploadWithPreview = ({
       )}
 
       {error && (
-        <motion.div 
+        <motion.div
           className="flex items-center space-x-2 text-red-600 bg-red-50 p-3 rounded-lg border border-red-200"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -2622,16 +2556,16 @@ const ImageUploadWithPreview = ({
 };
 
 // Enhanced Textarea Component
-const EnhancedTextarea = ({ 
-  label, 
-  value, 
-  onChange, 
-  placeholder, 
+const EnhancedTextarea = ({
+  label,
+  value,
+  onChange,
+  placeholder,
   required = false,
   rows = 4,
   error,
   description,
-  ...props 
+  ...props
 }) => (
   <div className="space-y-2">
     <label className="block text-sm font-semibold text-gray-800">
@@ -2645,15 +2579,14 @@ const EnhancedTextarea = ({
       onChange={onChange}
       placeholder={placeholder}
       rows={rows}
-      className={`w-full p-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 resize-none ${
-        error 
-          ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-200' 
-          : 'border-gray-200 bg-white focus:border-rose-500 focus:ring-rose-200'
-      }`}
+      className={`w-full p-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 resize-none ${error
+        ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-200'
+        : 'border-gray-200 bg-white focus:border-rose-500 focus:ring-rose-200'
+        }`}
       {...props}
     />
     {error && (
-      <motion.p 
+      <motion.p
         className="text-red-600 text-sm flex items-center space-x-1"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -2668,23 +2601,25 @@ const EnhancedTextarea = ({
 // Hotel Card Component
 const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
   const hotelName = hotel?.name || 'Unknown Hotel';
-  const hotelLocation = hotel?.location || 'Location not specified';
+  // Fix: Use address.city instead of location (which is GeoJSON object)
+  const hotelLocation = hotel?.address?.city || hotel?.city || 'Location not specified';
   const hotelDescription = hotel?.description || 'No description available';
-  const hotelPrice = typeof hotel?.price === 'number' ? hotel.price : 0;
-  const hotelTaxes = typeof hotel?.taxes === 'number' ? hotel.taxes : 0;
+  // Fix: Use pricePerNight from MongoDB schema
+  const hotelPrice = typeof hotel?.pricePerNight === 'number' ? hotel.pricePerNight : (typeof hotel?.price === 'number' ? hotel.price : 0);
+  const hotelTaxes = typeof hotel?.taxes === 'number' ? hotel.taxes : Math.round(hotelPrice * 0.18);
   const hotelRating = typeof hotel?.rating === 'number' ? hotel.rating : 0;
-  const hotelReviews = typeof hotel?.reviews === 'number' ? hotel.reviews : 0;
+  // Fix: Use totalReviews from MongoDB schema
+  const hotelReviews = typeof hotel?.totalReviews === 'number' ? hotel.totalReviews : (typeof hotel?.reviews === 'number' ? hotel.reviews : 0);
   const hotelStars = typeof hotel?.stars === 'number' ? hotel.stars : 4;
-  
-  const hotelImage = hotel?.image && hotel.image.trim() !== '' 
-    ? hotel.image 
-    : '/placeholder-hotel.jpg';
-  
+
+  // Fix: Use featuredImage or images array from MongoDB schema
+  const hotelImage = hotel?.featuredImage || (Array.isArray(hotel?.images) && hotel.images.length > 0 ? hotel.images[0] : hotel?.image) || '/placeholder-hotel.jpg';
+
   const hotelAmenities = Array.isArray(hotel?.amenities) ? hotel.amenities : [];
 
   return (
-    <motion.div 
-      key={hotel.id} 
+    <motion.div
+      key={hotel.id}
       className="group bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer transform hover:-translate-y-2 border border-rose-50"
       onClick={() => onHotelClick(hotel)}
       variants={cardVariants}
@@ -2695,8 +2630,8 @@ const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
     >
       <div className="flex flex-col md:flex-row h-full">
         <div className="md:w-2/5 h-64 md:h-auto relative overflow-hidden">
-          <LazyImage 
-            src={hotelImage} 
+          <LazyImage
+            src={hotelImage}
             alt={hotelName}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             onLoad={() => onImageLoad(hotel.id)}
@@ -2710,7 +2645,7 @@ const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
             {hotelStars} Star Luxury
           </div>
         </div>
-        
+
         <div className="p-6 md:w-3/5 flex flex-col">
           <div className="flex-grow">
             <div className="mb-3">
@@ -2720,15 +2655,15 @@ const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
                 <span className="truncate">{hotelLocation}</span>
               </div>
             </div>
-            
+
             <div className="my-5">
               <p className="text-gray-600 line-clamp-2">{hotelDescription}</p>
             </div>
-            
+
             <div className="mt-4 flex flex-wrap gap-2">
               {hotelAmenities.slice(0, 4).map(amenity => (
-                <motion.span 
-                  key={amenity} 
+                <motion.span
+                  key={amenity}
                   className="flex items-center text-sm bg-rose-50 text-rose-700 px-3 py-1.5 rounded-full border border-rose-100"
                   whileHover={{ scale: 1.05 }}
                 >
@@ -2743,7 +2678,7 @@ const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
               )}
             </div>
           </div>
-          
+
           <div className="mt-6 flex justify-between items-end">
             <div>
               <p className="text-gray-500 text-sm">Starting from</p>
@@ -2751,7 +2686,7 @@ const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
               <p className="text-gray-500 text-xs">+ ₹{hotelTaxes.toLocaleString()} taxes & fees</p>
               <p className="text-gray-500 text-sm mt-2">({hotelReviews} reviews)</p>
             </div>
-            <motion.button 
+            <motion.button
               className="bg-rose-600 hover:bg-rose-700 text-white px-6 py-2.5 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg flex items-center"
               onClick={(e) => {
                 e.preventDefault();
@@ -2774,9 +2709,9 @@ const HotelCard = React.memo(({ hotel, index, onImageLoad, onHotelClick }) => {
 const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  // Firebase state
-  const [firebaseUser, setFirebaseUser] = useState(null);
-  const [firebaseLoading, setFirebaseLoading] = useState(true);
+  // Use API-based auth context
+  const { user: authUser, isAuthenticated: authContextAuthenticated, login: authLogin, logout: authLogout, register: authRegister } = useAuth();
+  const [authLoading, setAuthLoading] = useState(false);
   const [googleSignInInProgress, setGoogleSignInInProgress] = useState(false);
   const [sortBy, setSortBy] = useState('price');
   const [showFilters, setShowFilters] = useState(false);
@@ -2959,273 +2894,110 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     refreshData
   } = useHotelStorage();
 
-  // Hotel users (hotel management accounts)
+  // Hotel users (hotel management accounts) - stored in MongoDB, not hardcoded
   const [hotelUsers, setHotelUsers] = useState(() => {
     const saved = localStorage.getItem('kashmirStays_hotelUsers');
-    return saved ? JSON.parse(saved) : [
-      { 
-        id: 1,
-        hotelName: 'Hotel Dal View',
-        ownerName: 'Rajesh Kumar',
-        email: 'hoteldalview@example.com', 
-        password: 'hotel123', 
-        role: 'hotel',
-        phone: '+91 9876543210',
-        address: 'Boulevard Road, Srinagar',
-        city: 'Srinagar',
-        pincode: '190001',
-        gstNumber: 'GSTIN123456789',
-        panNumber: 'ABCDE1234F',
-        hotels: [1],
-        registrationDate: new Date('2024-01-01').toISOString()
-      }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
 
-  // Admin user
-  const [adminUser] = useState({
-    id: 999,
-    name: 'Admin User',
-    email: 'admin@traveligo.com', 
-    password: 'admin123', 
-    role: 'admin'
-  });
+  // Admin user - now stored in MongoDB, not hardcoded
 
   // Terms and conditions state
   const [termsAccepted, setTermsAccepted] = useState(false);
 
-  // Firebase Authentication Integration
+  // API-based Authentication Integration (replaces Firebase)
   useEffect(() => {
-    let unsubscribe;
-    
-    try {
-      // Check for redirect result first
-      getRedirectResult(auth).then((result) => {
-        if (result) {
-          const user = result.user;
-          console.log('Google sign-in redirect successful:', user.email);
-          
-          const userData = {
-            uid: user.uid,
-            id: user.uid,
-            email: user.email,
-            name: user.displayName || user.email.split('@')[0],
-            role: 'hotel',
-            hotelName: `${user.displayName || 'User'}'s Hotel`,
-            photoURL: user.photoURL,
-            emailVerified: user.emailVerified
-          };
-          
-          setIsAuthenticated(true);
-          setUserRole('hotel');
-          setCurrentUser(userData);
-          setShowLoginModal(false);
-          
-          localStorage.setItem('currentUser', JSON.stringify(userData));
-          localStorage.setItem('isAuthenticated', 'true');
-          localStorage.setItem('userRole', 'hotel');
-        }
-      }).catch((error) => {
-        console.error('Redirect result error:', error);
-      });
-      
-      unsubscribe = onAuthStateChanged(auth, (user) => {
-        setFirebaseLoading(true);
-        try {
-          if (user) {
-            setFirebaseUser({
-              uid: user.uid,
-              email: user.email,
-              displayName: user.displayName,
-              emailVerified: user.emailVerified,
-              photoURL: user.photoURL
-            });
-            
-            const hotelUser = hotelUsers.find(u => u.email === user.email);
-            const existingUser = {
-              id: user.uid,
-              email: user.email,
-              name: user.displayName || user.email.split('@')[0],
-              role: 'hotel',
-              hotelName: hotelUser?.hotelName || 'Hotel Owner',
-              emailVerified: user.emailVerified,
-              ...hotelUser
-            };
-            
-            setCurrentUser(existingUser);
-            setIsAuthenticated(true);
-            setUserRole('hotel');
-            
-            localStorage.setItem('currentUser', JSON.stringify(existingUser));
-            localStorage.setItem('isAuthenticated', 'true');
-            localStorage.setItem('userRole', 'hotel');
-            localStorage.setItem('firebaseUID', user.uid);
-          } else {
-            setFirebaseUser(null);
-          }
-        } catch (error) {
-          console.error('Auth state change error:', error);
-        } finally {
-          setFirebaseLoading(false);
-        }
-      });
-    } catch (error) {
-      console.error('Firebase auth setup error:', error);
-      setFirebaseLoading(false);
+    // Check for stored auth state on mount
+    const storedUser = localStorage.getItem('currentUser');
+    const storedAuth = localStorage.getItem('isAuthenticated');
+    const storedRole = localStorage.getItem('userRole');
+
+    if (storedUser && storedAuth === 'true') {
+      try {
+        const userData = JSON.parse(storedUser);
+        setCurrentUser(userData);
+        setIsAuthenticated(true);
+        setUserRole(storedRole || 'user');
+      } catch (e) {
+        console.error('Error parsing stored user:', e);
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('isAuthenticated');
+        localStorage.removeItem('userRole');
+      }
     }
+    setAuthLoading(false);
+  }, []);
 
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [hotelUsers]);
-
-  // Enhanced Firebase Login Handler with Email Verification
-  const handleFirebaseLogin = async (email, password, role = 'hotel') => {
+  // API-based Login Handler (replaces Firebase)
+  const handleAPILogin = async (email, password, role = 'hotel') => {
     setLoading(true);
-    
+
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      
-      // Check email verification for hotel users
-      if (role === 'hotel' && !user.emailVerified) {
-        await sendEmailVerification(user);
-        throw new Error('Please verify your email address. A new verification email has been sent.');
+      // Use API for login
+      const response = await authAPI.login(email, password);
+
+      if (!response.success) {
+        throw new Error(response.message || 'Login failed');
       }
-      
-      // Check if user exists in hotelUsers for role verification
-      const hotelUser = hotelUsers.find(u => u.email === email);
-      
-      if (role === 'admin' && email !== 'admin@traveligo.com') {
+
+      const user = response.data.user;
+
+      // Check role for admin access
+      if (role === 'admin' && user.role !== 'admin') {
         throw new Error('Admin access denied');
       }
-      
+
       const userData = {
-        uid: user.uid,
-        id: hotelUser?.id || user.uid,
+        id: user.id,
         email: user.email,
-        name: hotelUser?.ownerName || user.displayName || user.email.split('@')[0],
-        role: role,
-        hotelName: hotelUser?.hotelName || 'Hotel Owner',
-        emailVerified: user.emailVerified,
-        ...hotelUser
+        name: user.name,
+        role: user.role,
+        hotelName: user.hotelId?.name || 'Hotel Owner',
+        isApproved: user.isApproved,
+        ...user
       };
-      
+
       return userData;
     } catch (error) {
-      console.error('Firebase login error:', error);
-      let errorMessage = 'Login failed. Please try again.';
-      
-      switch (error.code) {
-        case 'auth/invalid-email':
-          errorMessage = 'Invalid email address.';
-          break;
-        case 'auth/user-disabled':
-          errorMessage = 'This account has been disabled.';
-          break;
-        case 'auth/user-not-found':
-          errorMessage = 'No account found with this email.';
-          break;
-        case 'auth/wrong-password':
-          errorMessage = 'Incorrect password.';
-          break;
-        case 'auth/too-many-requests':
-          errorMessage = 'Too many failed attempts. Please try again later.';
-          break;
-        case 'auth/invalid-credential':
-          errorMessage = 'Invalid email or password.';
-          break;
-        default:
-          errorMessage = error.message || 'Login failed. Please try again.';
-      }
-      
+      console.error('API login error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Login failed. Please try again.';
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // Enhanced Google Sign-In Handler with Redirect Method
+  // Google Sign-In is not available in API-based auth (placeholder)
   const handleGoogleSignIn = async () => {
-    if (loading || googleSignInInProgress) return null;
-    
-    setLoading(true);
-    setGoogleSignInInProgress(true);
-    
-    try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ 
-        prompt: 'select_account'
-      });
-      
-      console.log('Attempting Google sign-in...');
-      
-      // Use redirect instead of popup to avoid COOP issues
-      const { signInWithRedirect } = await import('firebase/auth');
-      await signInWithRedirect(auth, provider);
-      
-      // The redirect will handle the rest
-      return null;
-    } catch (error) {
-      console.error('Google sign-in error:', error);
-      
-      let errorMessage = 'Google sign-in failed. Please try again.';
-      
-      switch (error.code) {
-        case 'auth/network-request-failed':
-          errorMessage = 'Network error. Please check your internet connection.';
-          break;
-        case 'auth/too-many-requests':
-          errorMessage = 'Too many requests. Please try again later.';
-          break;
-        case 'auth/unauthorized-domain':
-          errorMessage = 'This domain is not authorized for Google sign-in.';
-          break;
-        default:
-          errorMessage = error.message || 'Google sign-in failed. Please try again.';
-      }
-      
-      alert(errorMessage);
-      return null;
-    } finally {
-      setLoading(false);
-      setGoogleSignInInProgress(false);
-    }
+    alert('Google Sign-In is not available. Please use email/password login.');
+    return null;
   };
 
-  // Enhanced Firebase Registration Handler with Email Verification
-  const handleFirebaseRegister = async (registrationData) => {
+  // API-based Registration Handler (replaces Firebase)
+  const handleAPIRegister = async (registrationData) => {
     setLoading(true);
-    
+
     try {
-      // Create user in Firebase Authentication
-      const userCredential = await createUserWithEmailAndPassword(
-        auth, 
-        registrationData.email, 
-        registrationData.password
-      );
-      const user = userCredential.user;
-
-      // Update user profile with display name
-      await updateProfile(user, {
-        displayName: registrationData.ownerName
+      const response = await authAPI.register({
+        name: registrationData.ownerName,
+        email: registrationData.email,
+        password: registrationData.password,
+        phone: registrationData.phone,
+        role: 'hotel'
       });
 
-      // Send email verification
-      await sendEmailVerification(user, {
-        url: window.location.origin + '/hotels',
-        handleCodeInApp: false
-      });
+      if (!response.success) {
+        throw new Error(response.message || 'Registration failed');
+      }
 
-      // Create hotel user in local storage system
+      const user = response.data.user;
+
+      // Create hotel user locally
       const newHotelUser = {
-        id: user.uid,
+        id: user.id,
         hotelName: registrationData.hotelName,
         ownerName: registrationData.ownerName,
         email: registrationData.email,
-        password: registrationData.password,
         role: 'hotel',
         phone: registrationData.phone,
         address: registrationData.address,
@@ -3237,70 +3009,48 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         hotels: [],
         registrationDate: new Date().toISOString(),
         status: 'pending',
-        firebaseUID: user.uid,
-        emailVerified: user.emailVerified
+        isApproved: user.isApproved
       };
 
       // Add to hotelUsers array
       setHotelUsers(prev => [...prev, newHotelUser]);
 
-      // Set as current user
       const userData = {
-        uid: user.uid,
-        id: user.uid,
+        id: user.id,
         email: user.email,
         name: registrationData.ownerName,
         role: 'hotel',
         hotelName: registrationData.hotelName,
-        emailVerified: user.emailVerified,
+        isApproved: user.isApproved,
         ...newHotelUser
       };
 
       return userData;
     } catch (error) {
-      console.error('Firebase registration error:', error);
-      let errorMessage = 'Registration failed. Please try again.';
-      
-      switch (error.code) {
-        case 'auth/email-already-in-use':
-          errorMessage = 'An account with this email already exists.';
-          break;
-        case 'auth/invalid-email':
-          errorMessage = 'Invalid email address.';
-          break;
-        case 'auth/operation-not-allowed':
-          errorMessage = 'Email/password accounts are not enabled.';
-          break;
-        case 'auth/weak-password':
-          errorMessage = 'Password is too weak. Please use at least 6 characters.';
-          break;
-        default:
-          errorMessage = error.message || 'Registration failed. Please try again.';
-      }
-      
+      console.error('API registration error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Registration failed. Please try again.';
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // Enhanced Logout Handler
-  const handleFirebaseLogout = async () => {
+  // API-based Logout Handler (replaces Firebase)
+  const handleLogout = async () => {
     try {
-      setGoogleSignInInProgress(false); // Reset any pending sign-in state
-      await signOut(auth);
-      setFirebaseUser(null);
-      
-      // Also clear local storage
+      setGoogleSignInInProgress(false);
+      authAPI.logout();
+
+      // Clear local state
       setIsAuthenticated(false);
       setUserRole('');
       setCurrentUser(null);
-      
+
       localStorage.removeItem('currentUser');
       localStorage.removeItem('isAuthenticated');
       localStorage.removeItem('userRole');
-      localStorage.removeItem('firebaseUID');
-      
+      localStorage.removeItem('token');
+
       setShowAdminPanel(false);
       setShowHotelPanel(false);
       setShowHotelForm(false);
@@ -3326,7 +3076,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     const savedUser = localStorage.getItem('currentUser');
     const savedAuth = localStorage.getItem('isAuthenticated');
     const savedRole = localStorage.getItem('userRole');
-    
+
     if (savedUser && savedAuth === 'true') {
       try {
         const user = JSON.parse(savedUser);
@@ -3354,26 +3104,10 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     };
   }, []);
 
-  // Migration handler
+
+  // Migration handler - removed (no longer using Firebase)
   const handleMigration = async () => {
-    if (!window.confirm('This will migrate all localStorage data to Firebase. Continue?')) {
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const result = await migrateLocalStorageToFirebase();
-      if (result.success) {
-        alert(`Migration successful! Migrated ${result.migratedCount} hotels.`);
-        await refreshData();
-      } else {
-        alert('Migration failed: ' + result.error);
-      }
-    } catch (error) {
-      alert('Migration error: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
+    alert('Migration is not needed - using MongoDB backend now.');
   };
 
   // Data Export/Import Functions
@@ -3384,10 +3118,10 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       hotelUsers,
       exportDate: new Date().toISOString()
     };
-    
+
     const dataStr = JSON.stringify(data, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    
+
     const link = document.createElement('a');
     link.href = URL.createObjectURL(dataBlob);
     link.download = `kashmir-stays-backup-${new Date().toISOString().split('T')[0]}.json`;
@@ -3402,19 +3136,19 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target.result);
-        
+
         if (data.hotels) {
           setHotels(data.hotels);
         }
-        
+
         if (data.pendingHotels) {
           setPendingHotels(data.pendingHotels);
         }
-        
+
         if (data.hotelUsers) {
           setHotelUsers(data.hotelUsers);
         }
-        
+
         alert('Data imported successfully!');
       } catch (error) {
         console.error('Error importing data:', error);
@@ -3427,12 +3161,12 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   // Enhanced Room Availability Management
   const updateHotelRoomAvailability = async (hotelId, roomId, availabilityData) => {
     const hotel = hotels.find(h => h.id === hotelId);
-    if (!hotel) return;
-    
-    const updatedRooms = hotel.rooms.map(room => {
+    if (!hotel || !hotel.rooms) return;
+
+    const updatedRooms = (hotel.rooms || []).map(room => {
       if (room.id === roomId) {
-        return { 
-          ...room, 
+        return {
+          ...room,
           availabilityData: {
             ...room.availabilityData,
             ...availabilityData
@@ -3441,7 +3175,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       }
       return room;
     });
-    
+
     try {
       await updateHotel(hotelId, { rooms: updatedRooms });
     } catch (error) {
@@ -3452,8 +3186,8 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   const handleBulkRoomUpdate = async (hotelId, roomId, updates) => {
     const hotel = hotels.find(h => h.id === hotelId);
     if (!hotel) return;
-    
-    const updatedRooms = hotel.rooms.map(room => {
+
+    const updatedRooms = (hotel.rooms || []).map(room => {
       if (room.id === roomId) {
         return {
           ...room,
@@ -3465,7 +3199,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       }
       return room;
     });
-    
+
     try {
       await updateHotel(hotelId, { rooms: updatedRooms });
     } catch (error) {
@@ -3473,10 +3207,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     }
   };
 
-  // Handle logout function
-  const handleLogout = () => {
-    handleFirebaseLogout();
-  };
+  // Handle logout function (uses the API-based handleLogout defined above)
 
   // Form validation functions
   const validateStep = (step) => {
@@ -3553,7 +3284,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       .slice(0, currentStep - 1)
       .flatMap(step => step.fields)
       .length;
-    
+
     return Math.round((completedFields / totalFields) * 100);
   };
 
@@ -3714,13 +3445,13 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   const handleRoomAmenityToggle = (roomIndex, amenity) => {
     const updatedRooms = [...hotelForm.rooms];
     const roomAmenities = updatedRooms[roomIndex].amenities;
-    
+
     if (roomAmenities.includes(amenity)) {
       updatedRooms[roomIndex].amenities = roomAmenities.filter(a => a !== amenity);
     } else {
       updatedRooms[roomIndex].amenities = [...roomAmenities, amenity];
     }
-    
+
     setHotelForm(prev => ({
       ...prev,
       rooms: updatedRooms
@@ -3863,50 +3594,35 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     }));
   };
 
-  // Enhanced Login Handler with Firebase
+  // Enhanced Login Handler - hotel partners only
   const handleLogin = async (loginData) => {
     try {
-      // For admin, use existing system (no Firebase)
-      if (loginData.role === 'admin' && 
-          loginData.email === adminUser.email && 
-          loginData.password === adminUser.password) {
-        
-        setIsAuthenticated(true);
-        setUserRole('admin');
-        setCurrentUser(adminUser);
-        setShowLoginModal(false);
-        
-        localStorage.setItem('currentUser', JSON.stringify(adminUser));
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('userRole', 'admin');
-        
-        setLoginForm({
-          email: '',
-          password: '',
-          role: 'hotel'
-        });
-        return true;
+      // Use API for hotel users only
+      const userData = await handleAPILogin(loginData.email, loginData.password, 'hotel');
+
+      // Block admin users from logging in here
+      if (userData.role === 'admin') {
+        alert('Admin users cannot login here. Please use the Admin Portal at admin.traveligo.in');
+        authAPI.logout();
+        return false;
       }
 
-      // For hotel users, use Firebase
-      const userData = await handleFirebaseLogin(loginData.email, loginData.password, loginData.role);
-      
       setIsAuthenticated(true);
-      setUserRole(loginData.role);
+      setUserRole('hotel');
       setCurrentUser(userData);
       setShowLoginModal(false);
-      
+
       localStorage.setItem('currentUser', JSON.stringify(userData));
       localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('userRole', loginData.role);
-      localStorage.setItem('firebaseUID', userData.uid);
-      
+      localStorage.setItem('userRole', 'hotel');
+      localStorage.setItem('token', localStorage.getItem('token'));
+
       setLoginForm({
-          email: '',
-          password: '',
-          role: 'hotel'
-        });
-      
+        email: '',
+        password: '',
+        role: 'hotel'
+      });
+
       return true;
     } catch (error) {
       alert(error.message);
@@ -3930,18 +3646,18 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   // Enhanced Hotel Registration Handler with Firebase
   const handleHotelRegister = async (registrationData) => {
     try {
-      const userData = await handleFirebaseRegister(registrationData);
-      
+      const userData = await handleAPIRegister(registrationData);
+
       setIsAuthenticated(true);
       setUserRole('hotel');
       setCurrentUser(userData);
       setShowRegisterModal(false);
-      
+
       localStorage.setItem('currentUser', JSON.stringify(userData));
       localStorage.setItem('isAuthenticated', 'true');
       localStorage.setItem('userRole', 'hotel');
-      localStorage.setItem('firebaseUID', userData.uid);
-      
+      localStorage.setItem('userId', userData.id);
+
       setHotelRegisterForm({
         hotelName: '',
         ownerName: '',
@@ -3955,7 +3671,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         gstNumber: '',
         panNumber: ''
       });
-      
+
       alert('Registration successful! Please check your email to verify your account before logging in.');
       return true;
     } catch (error) {
@@ -3967,11 +3683,11 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   // Submit new hotel property (for hotels) - Goes to pending approval
   const submitNewHotel = async (e) => {
     e.preventDefault();
-    
+
     for (let step = 1; step <= formSteps.length; step++) {
       if (!validateStep(step)) {
         setCurrentStep(step);
-        alert(`Please fix the errors in ${formSteps[step-1].title} section`);
+        alert(`Please fix the errors in ${formSteps[step - 1].title} section`);
         return;
       }
     }
@@ -3987,7 +3703,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       image: hotelForm.image || "/placeholder-hotel.jpg",
       description: hotelForm.description || "A wonderful hotel with great amenities.",
       amenities: Array.isArray(hotelForm.amenities) ? hotelForm.amenities : [],
-      rooms: hotelForm.rooms.map(room => ({
+      rooms: (hotelForm.rooms || []).map(room => ({
         id: room.id || Date.now() + Math.random(),
         type: room.type || 'Standard Room',
         price: parseInt(room.price) || 0,
@@ -4008,7 +3724,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         payment: hotelForm.policies?.payment || 'Credit card or cash accepted',
         children: hotelForm.policies?.children || 'Children under 12 stay free with parents'
       },
-      nearbyAttractions: Array.isArray(hotelForm.nearbyAttractions) 
+      nearbyAttractions: Array.isArray(hotelForm.nearbyAttractions)
         ? hotelForm.nearbyAttractions.filter(attr => attr && attr.trim() !== '')
         : [''],
       specialFeatures: Array.isArray(hotelForm.specialFeatures)
@@ -4026,10 +3742,10 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
     try {
       await addHotel(newHotel);
-      
+
       if (currentUser) {
-        const updatedHotelUsers = hotelUsers.map(user => 
-          user.id === currentUser.id 
+        const updatedHotelUsers = hotelUsers.map(user =>
+          user.id === currentUser.id
             ? { ...user, hotels: [...(user.hotels || []), newHotel.id] }
             : user
         );
@@ -4090,7 +3806,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     setTermsAccepted(false);
 
     setShowHotelForm(false);
-    
+
     // Show success message with better styling
     const successMessage = document.createElement('div');
     successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 flex items-center space-x-2';
@@ -4101,7 +3817,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       <span>Submitted your data for approval</span>
     `;
     document.body.appendChild(successMessage);
-    
+
     // Remove the message after 5 seconds
     setTimeout(() => {
       if (successMessage.parentNode) {
@@ -4166,7 +3882,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   // Send booking email
   const sendBookingEmail = async (paymentMethod = 'Cash', paymentId = null) => {
     setLoading(true);
-    
+
     try {
       const templateParams = {
         hotel_name: selectedHotel.name,
@@ -4199,7 +3915,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       console.log('Email sent successfully:', result);
       setEmailSent(true);
       setLoading(false);
-      
+
       // Reset form after successful submission
       setTimeout(() => {
         setShowModal(false);
@@ -4233,11 +3949,11 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       const amount = calculateTotal() * 100;
       const currency = "INR";
       const bookingReference = `HOTEL-${Date.now()}`;
-      
+
       if (!window.Razorpay) {
         throw new Error('Razorpay payment gateway not available');
       }
-      
+
       const options = {
         key: "rzp_test_8O5v6zQ6T6W6X2",
         amount: amount,
@@ -4247,7 +3963,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         image: "https://cdn.razorpay.com/logos/7K3b6d18wHwKzL_medium.png",
         handler: async function (response) {
           console.log('Payment successful:', response);
-          
+
           await sendBookingEmail('Razorpay', response.razorpay_payment_id);
           setPaymentSuccess(true);
           setPaymentLoading(false);
@@ -4267,23 +3983,23 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
           color: "#EC4899"
         }
       };
-      
+
       const rzp1 = new window.Razorpay(options);
-      
+
       rzp1.on('payment.failed', function (response) {
         console.error('Payment failed:', response.error);
         let errorMessage = 'Payment failed. Please try again.';
-        
+
         if (response.error && response.error.description) {
           errorMessage = `Payment failed: ${response.error.description}`;
         }
-        
+
         alert(errorMessage);
         setPaymentLoading(false);
       });
-      
+
       rzp1.open();
-      
+
     } catch (error) {
       console.error('Payment initialization error:', error);
       alert('Failed to initialize payment. Please try again.');
@@ -4306,7 +4022,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   // Handle booking form submission
   const handleBookingSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!emailForm.name || !emailForm.email || !emailForm.phone) {
       alert('Please fill in all required fields: Name, Email, and Phone.');
       return;
@@ -4320,19 +4036,19 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
   // Filter hotels based on search query, amenities, and price range
   const filteredHotels = hotels.filter(hotel => {
     if (!hotel || typeof hotel !== 'object') return false;
-    
-    const matchesSearch = 
+
+    const matchesSearch =
       (hotel.name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-      (hotel.location?.toLowerCase() || '').includes(searchQuery.toLowerCase());
-    
-    const matchesAmenities = selectedAmenities.length === 0 || 
-      selectedAmenities.every(amenity => 
+      (hotel?.address?.city?.toLowerCase() || hotel?.city?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+
+    const matchesAmenities = selectedAmenities.length === 0 ||
+      selectedAmenities.every(amenity =>
         Array.isArray(hotel.amenities) && hotel.amenities.includes(amenity)
       );
-    
+
     const hotelPrice = typeof hotel.price === 'number' ? hotel.price : 0;
     const matchesPrice = hotelPrice >= priceRange[0] && hotelPrice <= priceRange[1];
-    
+
     return matchesSearch && matchesAmenities && matchesPrice;
   });
 
@@ -4413,24 +4129,21 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
     <div className="flex items-center justify-between mb-8">
       {[1, 2, 3].map((step) => (
         <div key={step} className="flex items-center">
-          <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
-            bookingStep >= step 
-              ? 'bg-rose-600 border-rose-600 text-white' 
-              : 'border-gray-300 text-gray-500'
-          }`}>
+          <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${bookingStep >= step
+            ? 'bg-rose-600 border-rose-600 text-white'
+            : 'border-gray-300 text-gray-500'
+            }`}>
             {bookingStep > step ? <FiCheck size={18} /> : step}
           </div>
-          <div className={`ml-2 text-sm font-medium ${
-            bookingStep >= step ? 'text-rose-600' : 'text-gray-500'
-          }`}>
+          <div className={`ml-2 text-sm font-medium ${bookingStep >= step ? 'text-rose-600' : 'text-gray-500'
+            }`}>
             {step === 1 && 'Select Dates'}
             {step === 2 && 'Guest Info'}
             {step === 3 && 'Payment'}
           </div>
           {step < 3 && (
-            <div className={`mx-4 w-12 h-0.5 ${
-              bookingStep > step ? 'bg-rose-600' : 'bg-gray-300'
-            }`} />
+            <div className={`mx-4 w-12 h-0.5 ${bookingStep > step ? 'bg-rose-600' : 'bg-gray-300'
+              }`} />
           )}
         </div>
       ))}
@@ -4439,22 +4152,22 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
   // Handle review submission
   const handleReviewSubmit = (hotelId, updatedReviews) => {
-    setHotels(prev => prev.map(hotel => 
-      hotel.id === hotelId 
+    setHotels(prev => prev.map(hotel =>
+      hotel.id === hotelId
         ? { ...hotel, reviews: updatedReviews.length, reviewData: updatedReviews }
         : hotel
     ));
   };
 
   return (
-    <motion.div 
+    <motion.div
       className="min-h-screen bg-gradient-to-b from-rose-50 to-white max-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
       initial="hidden"
       animate="visible"
       variants={containerVariants}
     >
       {/* Header */}
-      <motion.header 
+      <motion.header
         className="bg-white shadow-sm border-b border-rose-100"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -4468,7 +4181,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
               </div>
               <h1 className="text-xl sm:text-2xl font-bold text-gray-800">KashmirStays</h1>
             </div>
-            
+
             <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               {isAuthenticated ? (
                 <div className="flex flex-wrap items-center gap-2 sm:gap-4">
@@ -4486,7 +4199,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       </span>
                     )}
                   </div>
-                  
+
                   {userRole === 'hotel' && (
                     <>
                       <motion.button
@@ -4499,7 +4212,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                         <span className="hidden sm:inline">My Dashboard</span>
                         <span className="sm:hidden">Dashboard</span>
                       </motion.button>
-                      
+
                       <motion.button
                         className="bg-rose-600 hover:bg-rose-700 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center space-x-1 sm:space-x-2 transition-colors text-sm sm:text-base"
                         onClick={() => setShowHotelForm(true)}
@@ -4512,7 +4225,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       </motion.button>
                     </>
                   )}
-                  
+
                   {userRole === 'admin' && (
                     <motion.button
                       className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
@@ -4524,7 +4237,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       <span>Admin Panel</span>
                     </motion.button>
                   )}
-                  
+
                   <motion.button
                     className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
                     onClick={handleLogout}
@@ -4547,7 +4260,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                     <FiUserPlus size={18} />
                     <span>Hotel Register</span>
                   </motion.button> */}
-                  
+
                   {/* Login button hidden - Access via direct URL: /hotels-admin */}
                   {/* <motion.button
                     className="bg-rose-600 hover:bg-rose-700 text-white px-6 py-2.5 rounded-lg flex items-center space-x-2 transition-colors shadow-md"
@@ -4566,14 +4279,14 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
       </motion.header>
 
       {/* Enhanced Hero Section */}
-      <motion.div 
+      <motion.div
         className="relative h-96 overflow-hidden bg-gradient-to-r from-rose-600 to-rose-800 flex items-center justify-center"
         initial={{ opacity: 0, y: -50 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
       >
         <div className="absolute inset-0 bg-gradient-to-r from-rose-900/70 to-rose-800/60"></div>
-        <motion.div 
+        <motion.div
           className="relative z-10 text-center px-4"
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -4583,7 +4296,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
           <p className="text-xl text-white mb-8 max-w-2xl mx-auto drop-shadow-md">
             Experience world-class hospitality amidst breathtaking Himalayan landscapes
           </p>
-          <motion.div 
+          <motion.div
             className="bg-white/20 backdrop-blur-sm p-4 rounded-xl inline-block"
             whileHover={{ scale: 1.05 }}
             transition={{ type: "spring", stiffness: 300 }}
@@ -4598,7 +4311,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
       <div className="container mx-auto px-4 py-8 -mt-20 relative z-20">
         {/* Search and Filter Card */}
-        <motion.div 
+        <motion.div
           className="bg-white rounded-xl shadow-xl p-6 mb-8 transform transition-all duration-300 hover:shadow-2xl border border-rose-100"
           variants={itemVariants}
           whileHover={{ y: -5 }}
@@ -4616,7 +4329,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <motion.button 
+            <motion.button
               className="flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-4 sm:px-6 py-3 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg text-sm sm:text-base whitespace-nowrap"
               onClick={() => setShowFilters(!showFilters)}
               whileHover={{ scale: 1.05 }}
@@ -4630,7 +4343,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
           <AnimatePresence>
             {showFilters && (
-              <motion.div 
+              <motion.div
                 className="bg-white p-6 rounded-lg shadow-md mb-4 border border-rose-100"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
@@ -4640,7 +4353,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
                   <div>
                     <h3 className="font-medium mb-3 text-gray-800 text-lg">Sort By</h3>
-                    <select 
+                    <select
                       className="w-full p-3 border border-rose-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none focus:border-transparent shadow-sm"
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value)}
@@ -4655,8 +4368,8 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                     <h3 className="font-medium mb-3 text-gray-800 text-lg">Amenities</h3>
                     <div className="grid grid-cols-2 gap-3">
                       {['Pool', 'Spa', 'Free WiFi', 'Restaurant', 'Parking', 'Fitness Center'].map(amenity => (
-                        <motion.label 
-                          key={amenity} 
+                        <motion.label
+                          key={amenity}
                           className="flex items-center space-x-2"
                           whileHover={{ scale: 1.05 }}
                         >
@@ -4714,7 +4427,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         </motion.div>
 
         {/* Results Header */}
-        <motion.div 
+        <motion.div
           className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center"
           variants={itemVariants}
         >
@@ -4726,7 +4439,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
               {sortedHotels.length > 0 ? 'Handpicked selections for your perfect stay' : 'Try adjusting your filters to find more options'}
             </p>
           </div>
-          <motion.div 
+          <motion.div
             className="mt-4 md:mt-0 bg-rose-100 text-rose-800 px-4 py-2 rounded-full text-sm font-medium"
             whileHover={{ scale: 1.05 }}
           >
@@ -4735,15 +4448,15 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         </motion.div>
 
         {/* Hotel Listing with Lazy Loading */}
-        <motion.div 
+        <motion.div
           className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4 sm:gap-6 lg:gap-8"
           variants={containerVariants}
         >
           <Suspense fallback={<LoadingSpinner />}>
             {displayedHotels.map((hotel, index) => (
-              <HotelCard 
-                key={hotel.id} 
-                hotel={hotel} 
+              <HotelCard
+                key={hotel.id}
+                hotel={hotel}
                 index={index}
                 onImageLoad={handleImageLoad}
                 onHotelClick={openHotelDetails}
@@ -4776,7 +4489,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
         {/* No Results Message */}
         {sortedHotels.length === 0 && (
-          <motion.div 
+          <motion.div
             className="text-center py-16"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -4788,7 +4501,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
               </div>
               <h3 className="text-xl font-bold text-gray-800 mb-2">No hotels found</h3>
               <p className="text-gray-600 mb-4">Try adjusting your search criteria or filters to find more options.</p>
-              <motion.button 
+              <motion.button
                 className="bg-rose-600 hover:bg-rose-700 text-white px-6 py-2 rounded-lg transition-colors"
                 onClick={() => {
                   setSearchQuery('');
@@ -4820,8 +4533,8 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
             const updatedUser = { ...currentUser, ...profileData };
             setCurrentUser(updatedUser);
             localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-            
-            const updatedHotelUsers = hotelUsers.map(user => 
+
+            const updatedHotelUsers = hotelUsers.map(user =>
               user.id === currentUser.id ? { ...user, ...profileData } : user
             );
             setHotelUsers(updatedHotelUsers);
@@ -4851,27 +4564,27 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         {/* Hotel Property Submission Form */}
         <AnimatePresence>
           {showHotelForm && (
-            <motion.div 
+            <motion.div
               className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <motion.div 
+              <motion.div
                 className="bg-white rounded-2xl w-full max-w-6xl mx-4 max-h-[95vh] overflow-auto shadow-2xl scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
                 variants={modalVariants}
                 initial="hidden"
                 animate="visible"
                 exit="exit"
               >
-                
+
                 <div className="p-8">
                   <div className="flex justify-between items-center mb-8">
                     <div>
                       <h2 className="text-3xl font-bold text-gray-800">Add New Hotel Property</h2>
                       <p className="text-gray-600 mt-2">Fill in the details to list your property on KashmirStays (Pending Admin Approval)</p>
                     </div>
-                    <button 
+                    <button
                       onClick={() => {
                         setShowHotelForm(false);
                         setCurrentStep(1);
@@ -4888,12 +4601,12 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                   <div className="mb-8">
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-semibold text-gray-800">
-                        Step {currentStep} of {formSteps.length}: {formSteps[currentStep-1].title}
+                        Step {currentStep} of {formSteps.length}: {formSteps[currentStep - 1].title}
                       </h3>
                       <span className="text-rose-600 font-bold">{calculateCompletion()}% Complete</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3">
-                      <motion.div 
+                      <motion.div
                         className="bg-gradient-to-r from-rose-500 to-pink-500 h-3 rounded-full"
                         initial={{ width: '0%' }}
                         animate={{ width: `${calculateCompletion()}%` }}
@@ -4920,7 +4633,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                   <form onSubmit={submitNewHotel} className="space-y-8">
                     {/* Step 1: Basic Information */}
                     {currentStep === 1 && (
-                      <motion.div 
+                      <motion.div
                         className="bg-gradient-to-r from-rose-50 to-pink-50 p-8 rounded-2xl border border-rose-100"
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -5051,7 +4764,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
                     {/* Step 2: Amenities & Facilities */}
                     {currentStep === 2 && (
-                      <motion.div 
+                      <motion.div
                         className="bg-gradient-to-r from-blue-50 to-cyan-50 p-8 rounded-2xl border border-blue-100"
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -5068,7 +4781,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                         </div>
 
                         {formErrors.amenities && (
-                          <motion.div 
+                          <motion.div
                             className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6"
                             initial={{ opacity: 0, y: -10 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -5082,13 +4795,12 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {availableAmenities.map(amenity => (
-                            <motion.label 
-                              key={amenity} 
-                              className={`flex items-center space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
-                                hotelForm.amenities.includes(amenity)
-                                  ? 'bg-blue-500 text-white border-blue-500 shadow-lg'
-                                  : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:shadow-md'
-                              }`}
+                            <motion.label
+                              key={amenity}
+                              className={`flex items-center space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${hotelForm.amenities.includes(amenity)
+                                ? 'bg-blue-500 text-white border-blue-500 shadow-lg'
+                                : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:shadow-md'
+                                }`}
                               whileHover={{ scale: 1.02 }}
                               whileTap={{ scale: 0.98 }}
                             >
@@ -5098,9 +4810,8 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                 checked={hotelForm.amenities.includes(amenity)}
                                 onChange={() => handleAmenityToggle(amenity)}
                               />
-                              <div className={`flex items-center space-x-3 ${
-                                hotelForm.amenities.includes(amenity) ? 'text-white' : 'text-blue-500'
-                              }`}>
+                              <div className={`flex items-center space-x-3 ${hotelForm.amenities.includes(amenity) ? 'text-white' : 'text-blue-500'
+                                }`}>
                                 {amenityIcons[amenity] || <FiCheck size={20} />}
                                 <span className="font-medium">{amenity}</span>
                               </div>
@@ -5119,7 +4830,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
                     {/* Step 3: Room Configuration */}
                     {currentStep === 3 && (
-                      <motion.div 
+                      <motion.div
                         className="bg-gradient-to-r from-green-50 to-emerald-50 p-8 rounded-2xl border border-green-100"
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -5147,9 +4858,9 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                           </motion.button>
                         </div>
 
-                        {hotelForm.rooms.map((room, roomIndex) => (
-                          <motion.div 
-                            key={room.id} 
+                        {(hotelForm.rooms || []).map((room, roomIndex) => (
+                          <motion.div
+                            key={room.id}
                             className="bg-white p-8 rounded-2xl border-2 border-green-200 mb-8 last:mb-0 shadow-lg"
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
@@ -5326,7 +5037,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
                     {/* Step 4: Rate Management */}
                     {currentStep === 4 && (
-                      <motion.div 
+                      <motion.div
                         className="bg-gradient-to-r from-purple-50 to-violet-50 p-8 rounded-2xl border border-purple-100"
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -5458,7 +5169,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
                     {/* Step 5: Policies & Contact */}
                     {currentStep === 5 && (
-                      <motion.div 
+                      <motion.div
                         className="bg-gradient-to-r from-purple-50 to-violet-50 p-8 rounded-2xl border border-purple-100"
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -5477,7 +5188,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                           <div className="space-y-6">
                             <h4 className="text-lg font-bold text-gray-800 mb-4">Contact Information</h4>
-                            
+
                             <EnhancedInput
                               label="Contact Phone"
                               value={hotelForm.contact.phone}
@@ -5553,7 +5264,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
                     {/* Step 6: Additional Details */}
                     {currentStep === 6 && (
-                      <motion.div 
+                      <motion.div
                         className="bg-gradient-to-r from-amber-50 to-orange-50 p-8 rounded-2xl border border-amber-100"
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -5655,7 +5366,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
                     {/* Step 6: Review & Submit - ENHANCED */}
                     {currentStep === 6 && (
-                      <motion.div 
+                      <motion.div
                         className="bg-gradient-to-r from-indigo-50 to-purple-50 p-8 rounded-2xl border border-indigo-100"
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -5673,7 +5384,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
                         <div className="space-y-8">
                           {/* Success Celebration */}
-                          <motion.div 
+                          <motion.div
                             className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-8 text-center"
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
@@ -5723,7 +5434,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-gray-600">Starting Price:</span>
-                                    <span className="font-medium">₹{hotelForm.price.toLocaleString()}</span>
+                                    <span className="font-medium">₹{(hotelForm?.price || 0).toLocaleString()}</span>
                                   </div>
                                 </div>
                               </div>
@@ -5754,7 +5465,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                           {/* Terms and Conditions */}
                           <div className="bg-white rounded-xl border border-gray-200 p-6">
                             <h4 className="text-xl font-bold text-gray-800 mb-4">Terms & Conditions</h4>
-                            
+
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
                               <h5 className="font-semibold text-blue-800 mb-3 flex items-center">
                                 <FiInfo className="mr-2" />
@@ -5785,7 +5496,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                             </div>
 
                             {formErrors.terms && (
-                              <motion.div 
+                              <motion.div
                                 className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4"
                                 initial={{ opacity: 0, y: -10 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -5797,12 +5508,11 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                               </motion.div>
                             )}
 
-                            <motion.label 
-                              className={`flex items-start space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
-                                termsAccepted
-                                  ? 'bg-green-50 border-green-300 shadow-md'
-                                  : 'bg-gray-50 border-gray-200 hover:border-green-300'
-                              }`}
+                            <motion.label
+                              className={`flex items-start space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${termsAccepted
+                                ? 'bg-green-50 border-green-300 shadow-md'
+                                : 'bg-gray-50 border-gray-200 hover:border-green-300'
+                                }`}
                               whileHover={{ scale: 1.01 }}
                             >
                               <input
@@ -5816,9 +5526,9 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                   I agree to the KashmirStays Hotel Partner Agreement
                                 </span>
                                 <p className="text-sm text-gray-600 mt-1">
-                                  By checking this box, I confirm that all information provided is accurate and 
-                                  I agree to comply with KashmirStays' terms of service, commission structure, 
-                                  and quality standards. I understand that my property will undergo review before 
+                                  By checking this box, I confirm that all information provided is accurate and
+                                  I agree to comply with KashmirStays' terms of service, commission structure,
+                                  and quality standards. I understand that my property will undergo review before
                                   being published on the platform.
                                 </p>
                               </div>
@@ -5826,7 +5536,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                           </div>
 
                           {/* Final Call to Action */}
-                          <motion.div 
+                          <motion.div
                             className="bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200 rounded-2xl p-6 text-center"
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -5856,11 +5566,10 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                         type="button"
                         onClick={handlePrevStep}
                         disabled={currentStep === 1}
-                        className={`px-8 py-4 rounded-xl flex items-center space-x-2 transition-all ${
-                          currentStep === 1
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : 'bg-gray-500 text-white hover:bg-gray-600 shadow-lg hover:shadow-xl'
-                        }`}
+                        className={`px-8 py-4 rounded-xl flex items-center space-x-2 transition-all ${currentStep === 1
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-500 text-white hover:bg-gray-600 shadow-lg hover:shadow-xl'
+                          }`}
                         whileHover={currentStep !== 1 ? { scale: 1.05 } : {}}
                         whileTap={currentStep !== 1 ? { scale: 0.95 } : {}}
                       >
@@ -5902,13 +5611,13 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         {/* Hotel Management Panel */}
         <AnimatePresence>
           {showHotelPanel && (
-            <motion.div 
+            <motion.div
               className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <motion.div 
+              <motion.div
                 className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-auto shadow-2xl"
                 variants={modalVariants}
                 initial="hidden"
@@ -5921,7 +5630,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       <h2 className="text-2xl font-bold text-gray-800">Hotel Management Panel</h2>
                       <p className="text-gray-600">Manage your hotel properties and view performance</p>
                     </div>
-                    <button 
+                    <button
                       onClick={() => setShowHotelPanel(false)}
                       className="text-gray-400 hover:text-gray-600 transition-colors"
                     >
@@ -5931,7 +5640,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
 
                   {/* Stats Overview */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <motion.div 
+                    <motion.div
                       className="bg-gradient-to-r from-blue-50 to-cyan-50 p-6 rounded-xl border border-blue-100"
                       whileHover={{ scale: 1.02 }}
                     >
@@ -5946,7 +5655,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       </div>
                     </motion.div>
 
-                    <motion.div 
+                    <motion.div
                       className="bg-gradient-to-r from-amber-50 to-orange-50 p-6 rounded-xl border border-amber-100"
                       whileHover={{ scale: 1.02 }}
                     >
@@ -5961,7 +5670,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       </div>
                     </motion.div>
 
-                    <motion.div 
+                    <motion.div
                       className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 rounded-xl border border-green-100"
                       whileHover={{ scale: 1.02 }}
                     >
@@ -5985,7 +5694,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       <FiCheckCircle className="mr-2 text-green-500" />
                       Approved Hotels ({getCurrentUserHotels().length})
                     </h3>
-                    
+
                     {getCurrentUserHotels().length === 0 ? (
                       <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
                         <FiPackage className="mx-auto text-green-500 mb-2" size={32} />
@@ -5995,7 +5704,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                     ) : (
                       <div className="space-y-6">
                         {getCurrentUserHotels().map(hotel => (
-                          <motion.div 
+                          <motion.div
                             key={hotel.id}
                             className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
                             whileHover={{ y: -5 }}
@@ -6004,20 +5713,20 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                               <div className="flex justify-between items-start mb-4">
                                 <div>
                                   <h4 className="font-bold text-xl text-gray-800">{hotel.name}</h4>
-                                  <p className="text-gray-600 mt-1">{hotel.location}</p>
+                                  <p className="text-gray-600 mt-1">{hotel?.address?.city || hotel?.city || 'Location N/A'}</p>
                                 </div>
                                 <div className="text-right">
-                                  <p className="text-rose-600 font-bold text-xl">₹{hotel.price.toLocaleString()}</p>
+                                  <p className="text-rose-600 font-bold text-xl">₹{(hotel?.pricePerNight || hotel?.price || 0).toLocaleString()}</p>
                                   <StatusBadge status={hotel.status} />
                                 </div>
                               </div>
-                              
+
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {hotel.rooms.map(room => (
+                                {(hotel.rooms || []).map(room => (
                                   <div key={room.id} className="bg-gray-50 p-4 rounded-lg">
                                     <div className="flex justify-between items-start mb-3">
                                       <h5 className="font-semibold text-gray-800">{room.type}</h5>
-                                      <span className="text-rose-600 font-bold">₹{room.price.toLocaleString()}</span>
+                                      <span className="text-rose-600 font-bold">₹{(room?.price || 0).toLocaleString()}</span>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-3">
                                       <div>Total Rooms: {room.totalRooms}</div>
@@ -6048,7 +5757,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       <FiPending className="mr-2 text-yellow-500" />
                       Pending Approval ({getCurrentUserPendingHotels().length})
                     </h3>
-                    
+
                     {getCurrentUserPendingHotels().length === 0 ? (
                       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
                         <FiCheckCircle className="mx-auto text-yellow-500 mb-2" size={32} />
@@ -6065,7 +5774,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                           {getCurrentUserPendingHotels().map(hotel => (
                             <div key={hotel.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 items-center">
                               <div className="font-medium">{hotel.name}</div>
-                              <div className="text-gray-600">{hotel.location}</div>
+                              <div className="text-gray-600">{hotel?.address?.city || hotel?.city || 'Location N/A'}</div>
                               <div>
                                 <StatusBadge status={hotel.status} />
                               </div>
@@ -6090,13 +5799,13 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         {/* Availability Manager Modal */}
         <AnimatePresence>
           {showAvailabilityManager && selectedHotel && selectedRoomForAvailability && (
-            <motion.div 
+            <motion.div
               className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <motion.div 
+              <motion.div
                 className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-auto shadow-2xl"
                 variants={modalVariants}
                 initial="hidden"
@@ -6111,7 +5820,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                         Manage room availability for {selectedRoomForAvailability.type} at {selectedHotel.name}
                       </p>
                     </div>
-                    <button 
+                    <button
                       onClick={() => setShowAvailabilityManager(false)}
                       className="text-gray-400 hover:text-gray-600 transition-colors"
                     >
@@ -6133,7 +5842,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                         </div>
                         <div>
                           <p className="text-blue-600 text-sm font-medium">Base Price</p>
-                          <p className="text-lg font-semibold text-gray-800">₹{selectedRoomForAvailability.price.toLocaleString()}</p>
+                          <p className="text-lg font-semibold text-gray-800">₹{(selectedRoomForAvailability?.price || 0).toLocaleString()}</p>
                         </div>
                         <div>
                           <p className="text-blue-600 text-sm font-medium">Max Occupancy</p>
@@ -6249,13 +5958,13 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         {/* Admin Panel Modal */}
         <AnimatePresence>
           {showAdminPanel && (
-            <motion.div 
+            <motion.div
               className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <motion.div 
+              <motion.div
                 className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-auto shadow-2xl"
                 variants={modalVariants}
                 initial="hidden"
@@ -6265,7 +5974,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                 <div className="p-8">
                   <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-gray-800">Admin Dashboard</h2>
-                    <button 
+                    <button
                       onClick={() => setShowAdminPanel(false)}
                       className="text-gray-400 hover:text-gray-600 transition-colors"
                     >
@@ -6284,7 +5993,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       <FiDownload size={16} />
                       <span>Export Data</span>
                     </motion.button>
-                    
+
                     <label className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 cursor-pointer">
                       <FiUploadCloud size={16} />
                       <span>Import Data</span>
@@ -6295,7 +6004,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                         className="hidden"
                       />
                     </label>
-                    
+
                     <motion.button
                       onClick={() => {
                         localStorage.clear();
@@ -6316,7 +6025,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                       <FiPending className="mr-2 text-yellow-500" />
                       Pending Hotel Approvals ({pendingHotels.length})
                     </h3>
-                    
+
                     {pendingHotels.length === 0 ? (
                       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
                         <FiCheckCircle className="mx-auto text-yellow-500 mb-2" size={32} />
@@ -6335,7 +6044,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                           {pendingHotels.map(hotel => (
                             <div key={hotel.id} className="grid grid-cols-12 gap-4 p-4 items-center">
                               <div className="col-span-3 font-medium">{hotel.name}</div>
-                              <div className="col-span-3 text-gray-600">{hotel.location}</div>
+                              <div className="col-span-3 text-gray-600">{hotel?.address?.city || hotel?.city || 'Location N/A'}</div>
                               <div className="col-span-2 text-gray-600">{hotel.submittedBy}</div>
                               <div className="col-span-2 text-gray-600 text-sm">
                                 {new Date(hotel.submissionDate).toLocaleDateString()}
@@ -6385,8 +6094,8 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                         {hotels.map(hotel => (
                           <div key={hotel.id} className="grid grid-cols-12 gap-4 p-4 items-center">
                             <div className="col-span-3 font-medium">{hotel.name}</div>
-                            <div className="col-span-3 text-gray-600">{hotel.location}</div>
-                            <div className="col-span-2 text-rose-600 font-semibold">₹{hotel.price.toLocaleString()}</div>
+                            <div className="col-span-3 text-gray-600">{hotel?.address?.city || hotel?.city || 'Location N/A'}</div>
+                            <div className="col-span-2 text-rose-600 font-semibold">₹{(hotel?.pricePerNight || hotel?.price || 0).toLocaleString()}</div>
                             <div className="col-span-2">
                               <StatusBadge status={hotel.status} />
                             </div>
@@ -6449,35 +6158,35 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
         {/* Hotel Details Modal with Enhanced Booking */}
         <AnimatePresence>
           {showModal && selectedHotel && (
-            <motion.div 
+            <motion.div
               className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto backdrop-blur-sm"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <motion.div 
+              <motion.div
                 className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-auto shadow-2xl relative"
                 variants={modalVariants}
                 initial="hidden"
                 animate="visible"
                 exit="exit"
               >
-                <motion.button 
-                  onClick={closeModal} 
+                <motion.button
+                  onClick={closeModal}
                   className="absolute top-4 right-4 z-10 bg-white/80 hover:bg-white text-gray-800 p-2 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >
                   <FiX size={24} />
                 </motion.button>
-                
+
                 <div className="p-8">
                   {/* Hotel Header */}
                   <div className="flex flex-col lg:flex-row gap-8 mb-8">
                     <div className="lg:w-1/2">
                       <div className="relative h-80 rounded-2xl overflow-hidden">
-                        <LazyImage 
-                          src={selectedHotel.image} 
+                        <LazyImage
+                          src={selectedHotel.image}
                           alt={selectedHotel.name}
                           className="w-full h-full object-cover"
                         />
@@ -6490,31 +6199,31 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="lg:w-1/2">
                       <h1 className="text-3xl font-bold text-gray-800 mb-2">{selectedHotel.name}</h1>
                       <div className="flex items-center text-gray-600 mb-4">
                         <FiMapPin className="mr-2 text-rose-500" />
-                        <span>{selectedHotel.location}</span>
+                        <span>{selectedHotel?.address?.city || selectedHotel?.city || selectedHotel?.location || 'Location not specified'}</span>
                       </div>
-                      
-                      <p className="text-gray-700 mb-6">{selectedHotel.description}</p>
-                      
+
+                      <p className="text-gray-700 mb-6">{selectedHotel?.description || 'No description available'}</p>
+
                       <div className="grid grid-cols-2 gap-4 mb-6">
                         <div className="bg-rose-50 p-4 rounded-xl">
                           <div className="text-rose-600 text-sm font-medium">Starting Price</div>
-                          <div className="text-2xl font-bold text-gray-800">₹{selectedHotel.price.toLocaleString()}</div>
+                          <div className="text-2xl font-bold text-gray-800">₹{(selectedHotel?.pricePerNight || selectedHotel?.price || 0).toLocaleString()}</div>
                           <div className="text-gray-500 text-xs">per night</div>
                         </div>
                         <div className="bg-blue-50 p-4 rounded-xl">
                           <div className="text-blue-600 text-sm font-medium">Taxes & Fees</div>
-                          <div className="text-2xl font-bold text-gray-800">₹{selectedHotel.taxes.toLocaleString()}</div>
+                          <div className="text-2xl font-bold text-gray-800">₹{(selectedHotel?.taxes || Math.round((selectedHotel?.pricePerNight || selectedHotel?.price || 0) * 0.18)).toLocaleString()}</div>
                           <div className="text-gray-500 text-xs">per night</div>
                         </div>
                       </div>
-                      
+
                       <div className="flex flex-wrap gap-2 mb-6">
-                        {selectedHotel.amenities.slice(0, 6).map(amenity => (
+                        {(selectedHotel?.amenities || []).slice(0, 6).map(amenity => (
                           <span key={amenity} className="flex items-center bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full text-sm">
                             {amenityIcons[amenity] || <FiCheck className="mr-1" />}
                             {amenity}
@@ -6542,7 +6251,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                           <FiCalendar className="text-white" size={24} />
                           <span>Book Now</span>
                         </motion.button>
-                        
+
                         <motion.button
                           onClick={() => {
                             setActiveTab('booking');
@@ -6572,11 +6281,10 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                               setBookingStep(1);
                             }
                           }}
-                          className={`pb-4 px-1 font-medium text-sm border-b-2 transition-colors ${
-                            activeTab === tab
-                              ? 'border-rose-500 text-rose-600'
-                              : 'border-transparent text-gray-500 hover:text-gray-700'
-                          }`}
+                          className={`pb-4 px-1 font-medium text-sm border-b-2 transition-colors ${activeTab === tab
+                            ? 'border-rose-500 text-rose-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
                         >
                           {tab.charAt(0).toUpperCase() + tab.slice(1)}
                         </button>
@@ -6597,7 +6305,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                           <h3 className="text-xl font-bold text-gray-800 mb-4">Hotel Overview</h3>
                           <p className="text-gray-700 leading-relaxed">{selectedHotel.description}</p>
                         </div>
-                        
+
                         <div>
                           <h3 className="text-xl font-bold text-gray-800 mb-4">Amenities & Facilities</h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -6619,19 +6327,19 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                         animate={{ opacity: 1, y: 0 }}
                         className="space-y-6"
                       >
-                        {selectedHotel.rooms.map(room => (
+                        {(selectedHotel.rooms || []).map(room => (
                           <div key={room.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
                             <div className="flex flex-col lg:flex-row gap-6">
                               <div className="lg:w-1/3">
                                 {room.images && room.images[0] && (
-                                  <LazyImage 
-                                    src={room.images[0]} 
+                                  <LazyImage
+                                    src={room.images[0]}
                                     alt={room.type}
                                     className="w-full h-48 object-cover rounded-lg"
                                   />
                                 )}
                               </div>
-                              
+
                               <div className="lg:w-2/3">
                                 <div className="flex justify-between items-start mb-4">
                                   <div>
@@ -6639,11 +6347,11 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                     <p className="text-gray-600 mt-1">{room.size} • {room.beds}</p>
                                   </div>
                                   <div className="text-right">
-                                    <p className="text-2xl font-bold text-rose-600">₹{room.price.toLocaleString()}</p>
+                                    <p className="text-2xl font-bold text-rose-600">₹{(room?.price || 0).toLocaleString()}</p>
                                     <p className="text-gray-500 text-sm">per night</p>
                                   </div>
                                 </div>
-                                
+
                                 <div className="grid grid-cols-2 gap-4 mb-4 text-sm text-gray-600">
                                   <div className="flex items-center">
                                     <FiUsers className="mr-2 text-rose-500" />
@@ -6654,7 +6362,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                     <span>{room.totalRooms} rooms available</span>
                                   </div>
                                 </div>
-                                
+
                                 <div className="flex flex-wrap gap-2 mb-4">
                                   {room.amenities.slice(0, 4).map(amenity => (
                                     <span key={amenity} className="bg-rose-50 text-rose-700 px-2 py-1 rounded text-xs">
@@ -6667,7 +6375,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                     </span>
                                   )}
                                 </div>
-                                
+
                                 <div className="flex flex-col sm:flex-row gap-3">
                                   <motion.button
                                     onClick={() => {
@@ -6682,7 +6390,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                     <FiCalendar className="mr-2" />
                                     <span>Book This Room</span>
                                   </motion.button>
-                                  
+
                                   <motion.button
                                     onClick={() => {
                                       setSelectedRoom(room);
@@ -6728,7 +6436,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                               </div>
                             </div>
                           </div>
-                          
+
                           <div className="bg-green-50 p-6 rounded-xl">
                             <h4 className="font-bold text-gray-800 mb-3 flex items-center">
                               <FiUser className="mr-2 text-green-500" />
@@ -6739,7 +6447,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                               <div>{selectedHotel.policies.pets}</div>
                             </div>
                           </div>
-                          
+
                           <div className="bg-amber-50 p-6 rounded-xl md:col-span-2">
                             <h4 className="font-bold text-gray-800 mb-3 flex items-center">
                               <FiCreditCard className="mr-2 text-amber-500" />
@@ -6765,10 +6473,10 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                               <FiMapPin className="text-rose-500 mt-1 flex-shrink-0" />
                               <div>
                                 <h4 className="font-semibold text-gray-800">Hotel Address</h4>
-                                <p className="text-gray-700">{selectedHotel.location}</p>
+                                <p className="text-gray-700">{selectedHotel?.address?.city || selectedHotel?.city || 'Location N/A'}</p>
                               </div>
                             </div>
-                            
+
                             {selectedHotel.contact && (
                               <div className="flex items-start space-x-3">
                                 <FiPhone className="text-rose-500 mt-1 flex-shrink-0" />
@@ -6781,7 +6489,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                             )}
                           </div>
                         </div>
-                        
+
                         <div>
                           <h3 className="text-xl font-bold text-gray-800 mb-4">Nearby Attractions</h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -6866,19 +6574,18 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                 className="space-y-6"
                               >
                                 <h3 className="text-2xl font-bold text-gray-800">Select Your Stay</h3>
-                                
+
                                 {/* Room Selection */}
                                 <div className="bg-rose-50 p-6 rounded-xl">
                                   <h4 className="font-bold text-gray-800 mb-4">Select Room Type</h4>
                                   <div className="space-y-4">
-                                    {selectedHotel.rooms.map(room => (
+                                    {(selectedHotel.rooms || []).map(room => (
                                       <motion.div
                                         key={room.id}
-                                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                                          selectedRoom?.id === room.id
-                                            ? 'border-rose-500 bg-white shadow-lg'
-                                            : 'border-gray-200 bg-white hover:border-rose-300'
-                                        }`}
+                                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${selectedRoom?.id === room.id
+                                          ? 'border-rose-500 bg-white shadow-lg'
+                                          : 'border-gray-200 bg-white hover:border-rose-300'
+                                          }`}
                                         onClick={() => setSelectedRoom(room)}
                                         whileHover={{ scale: 1.02 }}
                                       >
@@ -6888,7 +6595,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                             <p className="text-gray-600 text-sm">{room.size} • {room.beds}</p>
                                           </div>
                                           <div className="text-right">
-                                            <p className="text-rose-600 font-bold text-xl">₹{room.price.toLocaleString()}</p>
+                                            <p className="text-rose-600 font-bold text-xl">₹{(room?.price || 0).toLocaleString()}</p>
                                             <p className="text-gray-500 text-sm">per night</p>
                                           </div>
                                         </div>
@@ -6930,11 +6637,11 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                     <div className="space-y-3">
                                       <div className="flex justify-between">
                                         <span className="text-gray-600">Room Price</span>
-                                        <span className="font-medium">₹{selectedRoom.price.toLocaleString()} x {calculateNights()} nights</span>
+                                        <span className="font-medium">₹{(selectedRoom?.price || 0).toLocaleString()} x {calculateNights()} nights</span>
                                       </div>
                                       <div className="flex justify-between">
                                         <span className="text-gray-600">Taxes & Fees</span>
-                                        <span className="font-medium">₹{selectedHotel.taxes.toLocaleString()} x {calculateNights()} nights</span>
+                                        <span className="font-medium">₹{(selectedHotel?.taxes || Math.round((selectedHotel?.pricePerNight || selectedHotel?.price || 0) * 0.18)).toLocaleString()} x {calculateNights()} nights</span>
                                       </div>
                                       <div className="border-t border-gray-200 pt-3">
                                         <div className="flex justify-between text-lg font-bold">
@@ -6957,7 +6664,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                     <span>Continue to Guest Information</span>
                                     <FiArrowRight size={20} />
                                   </motion.button>
-                                  
+
                                   <motion.button
                                     onClick={() => setBookingStep(3)}
                                     disabled={!selectedRoom}
@@ -6980,7 +6687,7 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                 className="space-y-6"
                               >
                                 <h3 className="text-2xl font-bold text-gray-800">Guest Information</h3>
-                                
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                   <EnhancedInput
                                     label="Full Name"
@@ -7060,13 +6767,13 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                 className="space-y-6"
                               >
                                 <h3 className="text-2xl font-bold text-gray-800">Payment</h3>
-                                
+
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                                   {/* Payment Options */}
                                   <div className="space-y-6">
                                     <div className="bg-white border border-gray-200 rounded-xl p-6">
                                       <h4 className="font-bold text-gray-800 mb-4">Choose Payment Method</h4>
-                                      
+
                                       <div className="space-y-4">
                                         <motion.button
                                           onClick={handleRazorpayPayment}
@@ -7126,16 +6833,16 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
                                   {/* Final Booking Summary */}
                                   <div className="bg-gray-50 p-6 rounded-xl h-fit">
                                     <h4 className="text-xl font-bold text-gray-800 mb-4">Booking Summary</h4>
-                                    
+
                                     <div className="space-y-4">
                                       <div className="flex justify-between items-start">
                                         <div>
                                           <h5 className="font-semibold text-gray-800">{selectedRoom.type}</h5>
                                           <p className="text-gray-600 text-sm">{selectedHotel.name}</p>
                                         </div>
-                                        <span className="text-rose-600 font-bold">₹{selectedRoom.price.toLocaleString()}/night</span>
+                                        <span className="text-rose-600 font-bold">₹{(selectedRoom?.price || 0).toLocaleString()}/night</span>
                                       </div>
-                                      
+
                                       <div className="space-y-2 text-sm text-gray-600">
                                         <div className="flex justify-between">
                                           <span>Check-in</span>
@@ -7183,10 +6890,10 @@ const Hotels = ({ showAdminLogin = false, showRegister = false }) => {
               </motion.div>
             </motion.div>
           )}
-        </AnimatePresence> 
+        </AnimatePresence>
       </div>
     </motion.div>
   );
-}; 
+};
 
 export default Hotels;
