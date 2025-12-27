@@ -1,7 +1,7 @@
-// React Hook for Hotel Storage Management
+// React Hook for Hotel Storage Management - MongoDB Version
+// This replaces the Firebase-based useHotelStorage hook
 import { useState, useEffect, useCallback } from 'react';
-import hotelStorage from '../utils/hotelStorage';
-import initializeSampleData from '../utils/initializeSampleData';
+import { hotelsAPI } from '../services/api.js';
 
 export const useHotelStorage = () => {
   const [hotels, setHotels] = useState([]);
@@ -9,66 +9,55 @@ export const useHotelStorage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Initialize data and set up real-time listeners
+  // Load hotels on mount
   useEffect(() => {
-    let hotelsUnsubscribe;
-    let pendingUnsubscribe;
+    loadHotels();
+  }, []);
 
-    const initializeData = async () => {
-      try {
-        setLoading(true);
-        
-        // Initialize sample data if needed
-        initializeSampleData();
-        
-        // Load initial data
-        const [initialHotels, initialPending] = await Promise.all([
-          hotelStorage.getApprovedHotels(),
-          hotelStorage.getPendingHotels()
-        ]);
-        
-        console.log(`✅ Hotels loaded: ${initialHotels.length} approved, ${initialPending.length} pending`);
-        
-        setHotels(initialHotels);
-        setPendingHotels(initialPending);
-        
-        // Set up real-time listeners
-        hotelsUnsubscribe = hotelStorage.subscribeToHotels((updatedHotels) => {
-          setHotels(updatedHotels);
-        });
-        
-        pendingUnsubscribe = hotelStorage.subscribeToPendingHotels((updatedPending) => {
-          setPendingHotels(updatedPending);
-        });
-        
-        setError(null);
-      } catch (err) {
-        console.error('Error initializing hotel data:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
+  const loadHotels = async () => {
+    try {
+      setLoading(true);
+      const response = await hotelsAPI.getHotels();
+      if (response.success) {
+        setHotels(response.data);
       }
-    };
+      setError(null);
+    } catch (err) {
+      console.error('Error loading hotels:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    initializeData();
-
-    // Cleanup function
-    return () => {
-      if (hotelsUnsubscribe) hotelsUnsubscribe();
-      if (pendingUnsubscribe) pendingUnsubscribe();
-    };
+  // Load pending hotels (admin only)
+  const loadPendingHotels = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await hotelsAPI.getPendingHotels();
+      if (response.success) {
+        setPendingHotels(response.data);
+      }
+    } catch (err) {
+      console.error('Error loading pending hotels:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   // Add new hotel
   const addHotel = useCallback(async (hotelData) => {
     try {
       setLoading(true);
-      const newHotel = await hotelStorage.addHotel(hotelData);
-      
-      // Update local state immediately for better UX
-      setPendingHotels(prev => [newHotel, ...prev]);
-      
-      return newHotel;
+      const response = await hotelsAPI.createHotel(hotelData);
+
+      if (response.success) {
+        // Add to pending list optimistically
+        setPendingHotels(prev => [response.data, ...prev]);
+        return response.data;
+      }
+      throw new Error(response.message || 'Failed to add hotel');
     } catch (err) {
       console.error('Error adding hotel:', err);
       setError(err.message);
@@ -78,19 +67,22 @@ export const useHotelStorage = () => {
     }
   }, []);
 
-  // Approve hotel
+  // Approve hotel (admin)
   const approveHotel = useCallback(async (hotelId) => {
     try {
       setLoading(true);
-      const approvedHotel = await hotelStorage.approveHotel(hotelId);
-      
-      if (approvedHotel) {
-        // Update local state immediately
-        setHotels(prev => [approvedHotel, ...prev]);
-        setPendingHotels(prev => prev.filter(hotel => hotel.id !== hotelId));
+      const response = await hotelsAPI.approveHotel(hotelId);
+
+      if (response.success) {
+        // Move from pending to approved
+        const approvedHotel = pendingHotels.find(h => h._id === hotelId || h.id === hotelId);
+        if (approvedHotel) {
+          setHotels(prev => [{ ...approvedHotel, status: 'approved' }, ...prev]);
+          setPendingHotels(prev => prev.filter(h => h._id !== hotelId && h.id !== hotelId));
+        }
+        return response.data;
       }
-      
-      return approvedHotel;
+      throw new Error(response.message || 'Failed to approve hotel');
     } catch (err) {
       console.error('Error approving hotel:', err);
       setError(err.message);
@@ -98,18 +90,19 @@ export const useHotelStorage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pendingHotels]);
 
-  // Reject hotel
-  const rejectHotel = useCallback(async (hotelId) => {
+  // Reject hotel (admin)
+  const rejectHotel = useCallback(async (hotelId, reason) => {
     try {
       setLoading(true);
-      await hotelStorage.rejectHotel(hotelId);
-      
-      // Update local state immediately
-      setPendingHotels(prev => prev.filter(hotel => hotel.id !== hotelId));
-      
-      return true;
+      const response = await hotelsAPI.rejectHotel(hotelId, reason);
+
+      if (response.success) {
+        setPendingHotels(prev => prev.filter(h => h._id !== hotelId && h.id !== hotelId));
+        return true;
+      }
+      throw new Error(response.message || 'Failed to reject hotel');
     } catch (err) {
       console.error('Error rejecting hotel:', err);
       setError(err.message);
@@ -123,14 +116,15 @@ export const useHotelStorage = () => {
   const updateHotel = useCallback(async (hotelId, updateData) => {
     try {
       setLoading(true);
-      const updatedHotel = await hotelStorage.updateHotel(hotelId, updateData);
-      
-      // Update local state immediately
-      setHotels(prev => prev.map(hotel => 
-        hotel.id === hotelId ? { ...hotel, ...updatedHotel } : hotel
-      ));
-      
-      return updatedHotel;
+      const response = await hotelsAPI.updateHotel(hotelId, updateData);
+
+      if (response.success) {
+        setHotels(prev => prev.map(hotel =>
+          (hotel._id === hotelId || hotel.id === hotelId) ? { ...hotel, ...response.data } : hotel
+        ));
+        return response.data;
+      }
+      throw new Error(response.message || 'Failed to update hotel');
     } catch (err) {
       console.error('Error updating hotel:', err);
       setError(err.message);
@@ -144,12 +138,13 @@ export const useHotelStorage = () => {
   const deleteHotel = useCallback(async (hotelId) => {
     try {
       setLoading(true);
-      await hotelStorage.deleteHotel(hotelId);
-      
-      // Update local state immediately
-      setHotels(prev => prev.filter(hotel => hotel.id !== hotelId));
-      
-      return true;
+      const response = await hotelsAPI.deleteHotel(hotelId);
+
+      if (response.success) {
+        setHotels(prev => prev.filter(h => h._id !== hotelId && h.id !== hotelId));
+        return true;
+      }
+      throw new Error(response.message || 'Failed to delete hotel');
     } catch (err) {
       console.error('Error deleting hotel:', err);
       setError(err.message);
@@ -159,72 +154,9 @@ export const useHotelStorage = () => {
     }
   }, []);
 
-  // Create backup
-  const createBackup = useCallback(async () => {
-    try {
-      const backup = await hotelStorage.createBackup();
-      return backup;
-    } catch (err) {
-      console.error('Error creating backup:', err);
-      setError(err.message);
-      throw err;
-    }
-  }, []);
-
-  // Restore from backup
-  const restoreFromBackup = useCallback(async () => {
-    try {
-      setLoading(true);
-      const restored = await hotelStorage.restoreFromBackup();
-      
-      if (restored) {
-        setHotels(restored.hotels || []);
-        setPendingHotels(restored.pendingHotels || []);
-      }
-      
-      return restored;
-    } catch (err) {
-      console.error('Error restoring backup:', err);
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Migrate to Firestore
-  const migrateToFirestore = useCallback(async () => {
-    try {
-      setLoading(true);
-      const success = await hotelStorage.migrateToFirestore();
-      return success;
-    } catch (err) {
-      console.error('Error migrating to Firestore:', err);
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Refresh data manually
+  // Refresh data
   const refreshData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [refreshedHotels, refreshedPending] = await Promise.all([
-        hotelStorage.getApprovedHotels(),
-        hotelStorage.getPendingHotels()
-      ]);
-      
-      setHotels(refreshedHotels);
-      setPendingHotels(refreshedPending);
-      setError(null);
-    } catch (err) {
-      console.error('Error refreshing data:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    await loadHotels();
   }, []);
 
   return {
@@ -233,22 +165,20 @@ export const useHotelStorage = () => {
     pendingHotels,
     loading,
     error,
-    
+
     // Actions
     addHotel,
     approveHotel,
     rejectHotel,
     updateHotel,
     deleteHotel,
-    createBackup,
-    restoreFromBackup,
-    migrateToFirestore,
+    loadPendingHotels,
     refreshData,
-    
+
     // Computed values
     totalHotels: hotels.length,
     totalPending: pendingHotels.length,
-    totalRegistered: hotels.length + pendingHotels.length, // Total registered hotels (approved + pending)
+    totalRegistered: hotels.length + pendingHotels.length,
     hasData: hotels.length > 0 || pendingHotels.length > 0
   };
 };

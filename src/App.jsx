@@ -78,7 +78,7 @@ import Utrakhand from './Footer/Utrakhand.jsx';
 import Japan from './Footer/Japan.jsx';
 import Azerbaijan from './Footer/Azarbaijan.jsx';
 import Nepal from './Footer/Nepal.jsx';
-import  Cancellation  from './Footer/Cancellation.jsx';
+import Cancellation from './Footer/Cancellation.jsx';
 import Googleplacesapi from './Components/googleplacesapi.jsx';
 import HotelRateExample from './examples/HotelRateExample.jsx';
 import RateTestComponent from './Components/Hotels/auth/RateTestComponent.jsx';
@@ -110,111 +110,111 @@ function App() {
 
   return (
     <AuthProvider>
-    <Router>
-      <div className="flex flex-col min-h-screen bg-gray-50">
-        <Navbar />
-        <main className="flex-grow">
-          <Routes>
-            {/* Main Routes */}
-            <Route path="/" element={<Home />} />
-            <Route path="/Home" element={<Home />} />
-            <Route path="/flights" element={<Flights />} />
-            <Route path="/hotels" element={<Hotels />} />
-            <Route path="/hotels-admin" element={<Hotels showAdminLogin={true} />} />
-            <Route path="/hotels-register" element={<Hotels showRegister={true} />} />
-            <Route path="/holidays" element={<HolidayPackages />} />
-            <Route path="/Trains" element={<Trains />} />
-            <Route path="/Cabs" element={<Cabs />} />
-            <Route path="/Blog" element={<Blog />} />
-            {/* Footer Routes */}
-            <Route path="/about" element={<About />} />
-            <Route path="/Gallery" element={<Gallery />} />
-            <Route path="/careers" element={<Careers />} />
-            <Route path="/investors" element={<Investors />} />
-            <Route path="/travel-agents" element={<TravelAgents />} />
-            <Route path="/faqs" element={<FAQs />} />
-            <Route path="/privacy" element={<PrivacyPolicy />} />
-            <Route path="/terms" element={<TermsOfUse />} />
-            <Route path="/feedback" element={<Feedback />} />
-            <Route path="/internationalhotels" element={<InternationalHotels />} />
-            <Route path="/holiday-packages" element={<HolidayPackages />} />
-            <Route path="/deals-offers" element={<DealsOffers />} />
-            <Route path="/business-travel" element={<BusinessTravel />} />
-            <Route path="/gift-cards" element={<GiftCards />} />
-            <Route path="/travel-guide" element={<TravelGuide />} />
-            <Route path="/corporate-travel" element={<CorporateTravel />} />
-            <Route path="/contact" element={<ContactUs />} />
-            <Route path="/policy" element={<BookingPolicy />} />
-            <Route path="/Himachal" element={<HimachalManaliPackages />} />
-            <Route path="/Rajasthan" element={<RajasthanPackages />} />
-            <Route path="/Goa" element={<Goa />} />
-            <Route path="/Kerala" element={<Kerala />} />
-            <Route path="/Dubai" element={<Dubai />} />
-            <Route path="/Bali" element={<Bali />} />
-            <Route path="/Thailand" element={<ThailandPackages />} />
-            <Route path="/kashmir" element={<KashmirPackage />} />
-            <Route path="/ladakh" element={<LadakhAdventures />} />
-            <Route path="/honeymoon" element={<HoneymoonSpecials />} />
-            <Route path="/team" element={<Ourteam />} />
-            <Route path="/GangtokDarjeeling" element={<GangtokDarjeeling />} />
-            <Route path="/Testimonials" element={<Testimonials />} />
-            <Route path="/LoginModal" element={<LoginModal />} />
-            <Route path="/admin/approvals" element={
-              <ProtectedRoute requiredRole="admin">
-                <AdminApprovalDashboard />
-              </ProtectedRoute>
-            } />
-            <Route path="/Womens" element={<Womens />} />
-            <Route path="/Section" element={<Section />} />
-            <Route path="/Weddings" element={<Weddings />} />
-            <Route path="/Spiti" element={<Spiti />} />
-            <Route path="/Andaman" element={<Andaman />} />
-            <Route path="/Bhutan" element={<Bhutan />} />
-            <Route path="/Meghalaya" element={<Meghalaya />} />
-            <Route path="/Banglore" element={<Banglore />} />
-            <Route path="/Lakshadweep" element={<Lakshadweep />} />
-            <Route path="/Vietnam" element={<Vietnam />} />
-            <Route path="/Singapore" element={<Singapore />} />
-            <Route path="/Hong" element={<Hong />} />
-            <Route path="/NewZealand" element={<NewZealand />} />
-            <Route path="/SouthAfrica" element={<SouthAfrica />} />
-            <Route path="/Azarbaijan" element={<Azarbaijan />} />
-            <Route path="/Almaty" element={<Almaty />} />
-            <Route path="/Georgia" element={<Georgia />} />
-            <Route path="/Uzbekistan" element={<Uzbekistan />} />
-            <Route path="/Kazakhstan" element={<Kazakhstan />} />
-            <Route path="/South" element={<South />} />
-            <Route path="/Srilanka" element={<Srilanka />} />
-            <Route path="/Egypt" element={<Egypt />} />
-            <Route path="/Russia" element={<Russia />} />
-            <Route path="/Mauritius" element={<Mauritius />} />
-            <Route path="/Turkey" element={<Turkey />} />
-            <Route path="/MadhyaPradesh" element={<MadhyaPradesh />} />
-            <Route path="/Utrakhand" element={<Utrakhand />} />
-            <Route path="/Japan" element={<Japan />} />
-            <Route path="/Azerbaijan" element={<Azerbaijan />} />
-            <Route path="/Nepal" element={<Nepal />} />
-            <Route path="/Cancellation" element={<Cancellation />} />
-            <Route path="/googleplacesapi" element={<Googleplacesapi />} />
-            <Route path="/hotel-rates-demo" element={<HotelRateExample />} />
-            <Route path="/rate-test" element={<RateTestComponent />} />
-            <Route path="/hotel-data" element={<HotelDataViewer />} />
-          </Routes>
-        </main>
+      <Router>
+        <div className="flex flex-col min-h-screen bg-gray-50">
+          <Navbar />
+          <main className="flex-grow">
+            <Routes>
+              {/* Main Routes */}
+              <Route path="/" element={<Home />} />
+              <Route path="/Home" element={<Home />} />
+              <Route path="/flights" element={<Flights />} />
+              <Route path="/hotels" element={<Hotels />} />
+              <Route path="/partner-login" element={<Hotels showAdminLogin={true} />} />
+              <Route path="/partner-register" element={<Hotels showRegister={true} />} />
+              <Route path="/holidays" element={<HolidayPackages />} />
+              <Route path="/Trains" element={<Trains />} />
+              <Route path="/Cabs" element={<Cabs />} />
+              <Route path="/Blog" element={<Blog />} />
+              {/* Footer Routes */}
+              <Route path="/about" element={<About />} />
+              <Route path="/Gallery" element={<Gallery />} />
+              <Route path="/careers" element={<Careers />} />
+              <Route path="/investors" element={<Investors />} />
+              <Route path="/travel-agents" element={<TravelAgents />} />
+              <Route path="/faqs" element={<FAQs />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfUse />} />
+              <Route path="/feedback" element={<Feedback />} />
+              <Route path="/internationalhotels" element={<InternationalHotels />} />
+              <Route path="/holiday-packages" element={<HolidayPackages />} />
+              <Route path="/deals-offers" element={<DealsOffers />} />
+              <Route path="/business-travel" element={<BusinessTravel />} />
+              <Route path="/gift-cards" element={<GiftCards />} />
+              <Route path="/travel-guide" element={<TravelGuide />} />
+              <Route path="/corporate-travel" element={<CorporateTravel />} />
+              <Route path="/contact" element={<ContactUs />} />
+              <Route path="/policy" element={<BookingPolicy />} />
+              <Route path="/Himachal" element={<HimachalManaliPackages />} />
+              <Route path="/Rajasthan" element={<RajasthanPackages />} />
+              <Route path="/Goa" element={<Goa />} />
+              <Route path="/Kerala" element={<Kerala />} />
+              <Route path="/Dubai" element={<Dubai />} />
+              <Route path="/Bali" element={<Bali />} />
+              <Route path="/Thailand" element={<ThailandPackages />} />
+              <Route path="/kashmir" element={<KashmirPackage />} />
+              <Route path="/ladakh" element={<LadakhAdventures />} />
+              <Route path="/honeymoon" element={<HoneymoonSpecials />} />
+              <Route path="/team" element={<Ourteam />} />
+              <Route path="/GangtokDarjeeling" element={<GangtokDarjeeling />} />
+              <Route path="/Testimonials" element={<Testimonials />} />
+              <Route path="/LoginModal" element={<LoginModal />} />
+              <Route path="/admin/approvals" element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminApprovalDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/Womens" element={<Womens />} />
+              <Route path="/Section" element={<Section />} />
+              <Route path="/Weddings" element={<Weddings />} />
+              <Route path="/Spiti" element={<Spiti />} />
+              <Route path="/Andaman" element={<Andaman />} />
+              <Route path="/Bhutan" element={<Bhutan />} />
+              <Route path="/Meghalaya" element={<Meghalaya />} />
+              <Route path="/Banglore" element={<Banglore />} />
+              <Route path="/Lakshadweep" element={<Lakshadweep />} />
+              <Route path="/Vietnam" element={<Vietnam />} />
+              <Route path="/Singapore" element={<Singapore />} />
+              <Route path="/Hong" element={<Hong />} />
+              <Route path="/NewZealand" element={<NewZealand />} />
+              <Route path="/SouthAfrica" element={<SouthAfrica />} />
+              <Route path="/Azarbaijan" element={<Azarbaijan />} />
+              <Route path="/Almaty" element={<Almaty />} />
+              <Route path="/Georgia" element={<Georgia />} />
+              <Route path="/Uzbekistan" element={<Uzbekistan />} />
+              <Route path="/Kazakhstan" element={<Kazakhstan />} />
+              <Route path="/South" element={<South />} />
+              <Route path="/Srilanka" element={<Srilanka />} />
+              <Route path="/Egypt" element={<Egypt />} />
+              <Route path="/Russia" element={<Russia />} />
+              <Route path="/Mauritius" element={<Mauritius />} />
+              <Route path="/Turkey" element={<Turkey />} />
+              <Route path="/MadhyaPradesh" element={<MadhyaPradesh />} />
+              <Route path="/Utrakhand" element={<Utrakhand />} />
+              <Route path="/Japan" element={<Japan />} />
+              <Route path="/Azerbaijan" element={<Azerbaijan />} />
+              <Route path="/Nepal" element={<Nepal />} />
+              <Route path="/Cancellation" element={<Cancellation />} />
+              <Route path="/googleplacesapi" element={<Googleplacesapi />} />
+              <Route path="/hotel-rates-demo" element={<HotelRateExample />} />
+              <Route path="/rate-test" element={<RateTestComponent />} />
+              <Route path="/hotel-data" element={<HotelDataViewer />} />
+            </Routes>
+          </main>
 
-        {/* ✅ Single Shapo Widget Container */}
-        <div
-          id="shapo-widget-b33b95e2144c34fb2f12"
-          style={{
-            bottom: '10px',
-            right: '20px',
-            zIndex: '1000'
-          }}
-        ></div>
+          {/* ✅ Single Shapo Widget Container */}
+          <div
+            id="shapo-widget-b33b95e2144c34fb2f12"
+            style={{
+              bottom: '10px',
+              right: '20px',
+              zIndex: '1000'
+            }}
+          ></div>
 
-        <Footer />
-      </div>
-    </Router>
+          <Footer />
+        </div>
+      </Router>
     </AuthProvider>
   );
 }
